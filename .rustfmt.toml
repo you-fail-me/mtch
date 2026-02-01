@@ -1,0 +1,5 @@
+# Rustfmt configuration for SMatch order matching engine
+
+edition = "2024"
+max_width = 250
+use_field_init_shorthand = true

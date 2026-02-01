@@ -1,0 +1,8 @@
+cognitive-complexity-threshold = 15
+type-complexity-threshold = 250
+
+array-size-threshold = 524288
+
+allowed-idents-below-min-chars = ["px", "qty", "id", "ts"]
+
+disallowed-methods = []

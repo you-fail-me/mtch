@@ -1,0 +1,99 @@
+[package]
+name = "mtch"
+version = "0.1.0"
+edition = "2024"
+
+[lints.rust]
+unsafe_code = "warn"
+# missing_docs = "warn"
+
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+perf = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+pedantic = { level = "allow", priority = -1 }
+
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
+
+explicit_iter_loop = "warn"
+redundant_else = "warn"
+semicolon_if_nothing_returned = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+checked_conversions = "warn"
+fallible_impl_from = "deny"
+match_wildcard_for_single_variants = "warn"
+default_trait_access = "warn"
+map_unwrap_or = "warn"
+must_use_candidate = "warn"
+needless_pass_by_value = "warn"
+unused_self = "warn"
+
+large_stack_arrays = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+module_name_repetitions = "allow"
+similar_names = "allow"
+
+dbg_macro = "deny"
+exit = "deny"
+mem_forget = "deny"
+get_unwrap = "warn"
+unwrap_in_result = "warn"
+clone_on_ref_ptr = "warn"
+create_dir = "warn"
+deref_by_slicing = "warn"
+empty_structs_with_brackets = "warn"
+format_push_string = "warn"
+if_then_some_else_none = "warn"
+let_underscore_must_use = "warn"
+lossy_float_literal = "warn"
+map_err_ignore = "warn"
+missing_docs_in_private_items = "warn"
+mixed_read_write_in_expression = "warn"
+multiple_inherent_impl = "warn"
+panic_in_result_fn = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+same_name_method = "warn"
+string_add = "warn"
+string_slice = "warn"
+try_err = "warn"
+unnecessary_self_imports = "warn"
+unused_variables = "warn"
+verbose_file_reads = "warn"
+windows_strings = "warn"
+
+[dependencies]
+rtrb = "0.3.2"
+thread-priority = "3.0.0"
+core_affinity = "0.8.3"
+num_cpus = "1.17"
+
+[dev-dependencies]
+criterion = { version = "0.8.1", features = ["html_reports"] }
+
+[[bench]]
+name = "price_level"
+harness = false
+
+[[bench]]
+name = "book"
+harness = false
+
+[[bench]]
+name = "end_to_end"
+harness = false
+
+[profile.bench]
+debug = true
