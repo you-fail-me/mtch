@@ -9,18 +9,21 @@ use std::hint::black_box;
 
 fn bench_e2e_add_limit_order(c: &mut Criterion) {
     c.bench_function("e2e_add_limit_order", |b| {
-        // 16k pool for 10k pre-populated maker orders, 128 ticks (100 price levels)
         let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
 
-        // Pre-populate with asks that can be matched
-        for i in 0..10000 {
-            let _ = engine.add_limit_order(i, 1, Side::Ask, 10000 + (i % 100) * 10, 100);
+        // Create spread: bids @ 9900-9949, asks @ 10000-10049
+        for i in 0..5000 {
+            let _ = engine.add_limit_order(i, 1, Side::Bid, 9900 + (i % 50), 100);
+            let _ = engine.add_limit_order(i + 5000, 1, Side::Ask, 10000 + (i % 50), 100);
         }
 
         let mut id = 10000;
+        let mut px = 9990;
         b.iter(|| {
             id += 1;
-            black_box(engine.add_limit_order(id, 2, Side::Bid, 11000, 50).unwrap())
+            // Add resting bids inside spread (9990-9999 < best ask 10000)
+            px = 9990 + (px % 10);
+            black_box(engine.add_limit_order(id, 2, Side::Bid, px, 100).unwrap())
         });
 
         let _ = engine.stop();
@@ -29,7 +32,6 @@ fn bench_e2e_add_limit_order(c: &mut Criterion) {
 
 fn bench_e2e_cancel_order(c: &mut Criterion) {
     c.bench_function("e2e_cancel_order", |b| {
-        // 16k pool for 10k pre-populated orders, 128 ticks (100 price levels)
         let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
 
         for i in 0..10000 {
@@ -49,11 +51,11 @@ fn bench_e2e_cancel_order(c: &mut Criterion) {
 
 fn bench_e2e_market_order(c: &mut Criterion) {
     c.bench_function("e2e_market_order", |b| {
-        // 16k pool for 10k resting maker orders, 128 ticks (100 price levels)
         let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
 
+        // 10k asks @ 10000-10099, qty 1000 each (10M total liquidity)
         for i in 0..10000 {
-            let _ = engine.add_limit_order(i, 1, Side::Ask, 10000 + (i % 100) * 10, 100);
+            let _ = engine.add_limit_order(i, 1, Side::Ask, 10000 + (i % 100), 1000);
         }
 
         let mut id = 10000;
