@@ -10,7 +10,7 @@ use std::hint::black_box;
 fn bench_e2e_add_limit_order(c: &mut Criterion) {
     c.bench_function("e2e_add_limit_order", |b| {
         // 128k pool for 100k max orders, 64 ticks (all at similar price)
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 32768, 64, 131072)).unwrap();
+        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 64, 131072)).unwrap();
         let mut id = 0;
 
         b.iter(|| {
@@ -25,7 +25,7 @@ fn bench_e2e_add_limit_order(c: &mut Criterion) {
 fn bench_e2e_cancel_order(c: &mut Criterion) {
     c.bench_function("e2e_cancel_order", |b| {
         // 16k pool for 10k pre-populated orders, 128 ticks (100 price levels)
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 32768, 128, 16384)).unwrap();
+        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384)).unwrap();
 
         for i in 0..10000 {
             let _ = engine.add_limit_order(i, 1, Side::Bid, 9000 + (i % 100), 100);
@@ -45,7 +45,7 @@ fn bench_e2e_cancel_order(c: &mut Criterion) {
 fn bench_e2e_market_order(c: &mut Criterion) {
     c.bench_function("e2e_market_order", |b| {
         // 16k pool for 10k maker orders + market orders, 128 ticks (100 price levels)
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 32768, 128, 16384)).unwrap();
+        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384)).unwrap();
 
         for i in 0..10000 {
             let _ = engine.add_limit_order(i, 1, Side::Ask, 10000 + (i % 100) * 10, 100);

@@ -4,7 +4,7 @@ use mtch::ingress::CancelOrderResult;
 use mtch::{Engine, EngineConfig};
 
 pub fn setup_engine(base_px: u64, tick_size: u64) -> Engine {
-    let config = EngineConfig::new(1100, tick_size, base_px, 32768, 64, 131072);
+    let config = EngineConfig::new(1100, tick_size, base_px, 1024, 64, 131072);
     Engine::new(config).expect("failed to create engine")
 }
 
