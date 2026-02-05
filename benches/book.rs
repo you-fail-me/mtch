@@ -19,7 +19,7 @@ fn bench_add_limit_order(c: &mut Criterion) {
                 _ => unreachable!(),
             };
 
-            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000);
+            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000, 50, 5000);
 
             // Pre-populate for non-empty scenarios
             match scenario {
@@ -71,7 +71,7 @@ fn bench_add_market_order(c: &mut Criterion) {
                 _ => unreachable!(),
             };
 
-            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000);
+            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000, 50, 5000);
 
             match scenario {
                 "thin" => {
@@ -120,7 +120,7 @@ fn bench_cancel_order(c: &mut Criterion) {
                 _ => unreachable!(),
             };
 
-            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000);
+            let mut book = OrderBook::new(tick_capacity, pool_capacity, 100, 1, 10000, 50, 5000);
 
             match scenario {
                 "thin" => {
@@ -163,7 +163,7 @@ fn bench_limit_order_matching(c: &mut Criterion) {
 
     group.bench_function("full_fill", |b| {
         // Minimal config: only 2 orders needed at a time (maker + taker)
-        let mut book = OrderBook::new(64, 256, 100, 1, 10000);
+        let mut book = OrderBook::new(64, 256, 100, 1, 10000, 50, 5000);
         let mut seq = 0u64;
 
         b.iter(|| {
@@ -180,7 +180,7 @@ fn bench_limit_order_matching(c: &mut Criterion) {
 
     group.bench_function("partial_fill", |b| {
         // Minimal config: only 3 orders needed at a time (maker + taker + cancel)
-        let mut book = OrderBook::new(64, 256, 100, 1, 10000);
+        let mut book = OrderBook::new(64, 256, 100, 1, 10000, 50, 5000);
         let mut seq = 0u64;
 
         b.iter(|| {
@@ -203,7 +203,7 @@ fn bench_market_order_scenarios(c: &mut Criterion) {
     let mut group = c.benchmark_group("book_market_scenarios");
 
     group.bench_function("full_fill", |b| {
-        let mut book = OrderBook::new(64, 256, 100, 1, 10000);
+        let mut book = OrderBook::new(64, 256, 100, 1, 10000, 50, 5000);
         let mut seq = 0u64;
 
         b.iter(|| {
@@ -218,7 +218,7 @@ fn bench_market_order_scenarios(c: &mut Criterion) {
 
     group.bench_function("sweep", |b| {
         // Need space for 10 levels + 1 sweep order
-        let mut book = OrderBook::new(64, 512, 100, 1, 10000);
+        let mut book = OrderBook::new(64, 512, 100, 1, 10000, 50, 5000);
         let mut seq = 0u64;
 
         b.iter(|| {
@@ -234,7 +234,7 @@ fn bench_market_order_scenarios(c: &mut Criterion) {
 
     group.bench_function("rejected", |b| {
         // Minimal config for rejected orders (no orders stored)
-        let mut book = OrderBook::new(64, 128, 100, 1, 10000);
+        let mut book = OrderBook::new(64, 128, 100, 1, 10000, 50, 5000);
         let mut seq = 0u64;
 
         b.iter(|| {

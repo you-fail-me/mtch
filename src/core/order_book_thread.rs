@@ -9,25 +9,29 @@ pub struct OrderBookThread {
     tick_size: u64,
     tick_capacity: usize,
     pool_capacity: usize,
+    min_order_qty: u64,
+    max_order_qty: u64,
     cmd_rx: Consumer<MatchCmd>,
     cmd_tx: Producer<OrderBookResponse>,
 }
 
 impl OrderBookThread {
-    pub fn new(symbol: u32, base_px: u64, tick_size: u64, tick_capacity: usize, pool_capacity: usize, cmd_rx: Consumer<MatchCmd>, cmd_tx: Producer<OrderBookResponse>) -> Self {
+    pub fn new(symbol: u32, base_px: u64, tick_size: u64, tick_capacity: usize, pool_capacity: usize, min_order_qty: u64, max_order_qty: u64, cmd_rx: Consumer<MatchCmd>, cmd_tx: Producer<OrderBookResponse>) -> Self {
         Self {
             symbol,
             base_px,
             tick_size,
             tick_capacity,
             pool_capacity,
+            min_order_qty,
+            max_order_qty,
             cmd_rx,
             cmd_tx,
         }
     }
 
     pub fn run(mut self) {
-        let mut book = OrderBook::new(self.tick_capacity, self.pool_capacity, self.symbol, self.tick_size, self.base_px);
+        let mut book = OrderBook::new(self.tick_capacity, self.pool_capacity, self.symbol, self.tick_size, self.base_px, self.min_order_qty, self.max_order_qty);
 
         loop {
             if let Ok(cmd) = self.cmd_rx.pop() {

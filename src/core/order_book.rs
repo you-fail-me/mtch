@@ -1,3 +1,4 @@
+use crate::core::fill_buffer::FillBuffer;
 use crate::core::order::{Handle, Order, OrderLocation, OrderType, Side};
 use crate::core::order_index::OrderIndex;
 use crate::core::order_pool::OrderPool;
@@ -45,25 +46,30 @@ pub struct OrderBook {
     symbol: u32,
     tick_size: u64,
     pool_capacity: usize,
+    min_order_qty: u64,
+    max_order_qty: u64,
 
     pool: OrderPool,
     bids: TickArray,
     asks: TickArray,
     order_index: OrderIndex,
-    fill_buffer: Vec<Fill>,
+    fill_buffer: FillBuffer,
 }
 
 impl OrderBook {
-    pub fn new(tick_capacity: usize, pool_capacity: usize, symbol: u32, tick_size: u64, base_px: u64) -> Self {
+    pub fn new(tick_capacity: usize, pool_capacity: usize, symbol: u32, tick_size: u64, base_px: u64, min_order_qty: u64, max_order_qty: u64) -> Self {
+        let max_fills = (max_order_qty / min_order_qty) as usize;
         Self {
             symbol,
             tick_size,
             pool_capacity,
+            min_order_qty,
+            max_order_qty,
             pool: OrderPool::new(pool_capacity),
             bids: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Less),
             asks: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Greater),
             order_index: OrderIndex::new(pool_capacity),
-            fill_buffer: Vec::with_capacity(2 * 1024),
+            fill_buffer: FillBuffer::new(max_fills),
         }
     }
 
@@ -104,6 +110,11 @@ impl OrderBook {
     }
 
     pub fn add_order(&mut self, mut order: Order, seq: u64) -> AddOrderResult {
+        // Validate order quantity
+        if order.qty < self.min_order_qty || order.qty > self.max_order_qty {
+            return AddOrderResult::Rejected;
+        }
+
         if order.order_type == OrderType::Market {
             order.px = match order.side {
                 Side::Bid => u64::MAX,
@@ -117,26 +128,18 @@ impl OrderBook {
             }
         }
 
-        self.fill_buffer.clear();
+        self.fill_buffer.drain();
         self.try_match(&mut order, seq);
 
         if order.order_type == OrderType::Market {
             if order.qty == 0 {
                 return AddOrderResult::Filled { remaining_qty: 0 };
-            } else if !self.fill_buffer.is_empty() {
-                return AddOrderResult::Filled { remaining_qty: order.qty };
             }
             return AddOrderResult::Rejected;
         }
 
         if order.qty == 0 {
             AddOrderResult::Filled { remaining_qty: 0 }
-        } else if !self.fill_buffer.is_empty() {
-            let remaining_qty = order.qty;
-            if self.add_to_level(order).is_none() {
-                return AddOrderResult::Rejected;
-            }
-            AddOrderResult::Filled { remaining_qty }
         } else {
             if self.add_to_level(order).is_none() {
                 return AddOrderResult::Rejected;
@@ -249,7 +252,7 @@ impl OrderBook {
         }
     }
 
-    fn match_orders_at_level(taker_order: &mut Order, level: &mut PriceLevel, match_px: u64, fills: &mut Vec<Fill>, pool: &mut OrderPool, order_index: &mut OrderIndex, seq: u64) -> bool {
+    fn match_orders_at_level(taker_order: &mut Order, level: &mut PriceLevel, match_px: u64, fills: &mut FillBuffer, pool: &mut OrderPool, order_index: &mut OrderIndex, seq: u64) -> bool {
         let mut current = level.head;
 
         while taker_order.qty > 0 {

@@ -1,3 +1,4 @@
+pub mod fill_buffer;
 pub mod free_list;
 pub mod messages;
 pub mod order;
@@ -8,6 +9,7 @@ pub mod order_pool;
 pub mod price_level;
 pub mod tick_array;
 
+pub use fill_buffer::FillBuffer;
 pub use free_list::FreeList;
 pub use messages::{IngressCmd, OrderBookResponse};
 pub use order::{Order, Side};

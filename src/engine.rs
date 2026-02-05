@@ -3,7 +3,7 @@ use crate::core::messages::OrderBookResponse;
 use crate::core::order::Side;
 use crate::core::order_book::BookSnapshot;
 use crate::error::Error;
-use crate::ingress::{CancelOrderResult, Ingress};
+use crate::ingress::{CancelOrderResult, Ingress, IngressConfig};
 use crate::wal::WalThread;
 use core_affinity::{CoreId, get_core_ids, set_for_current};
 use num_cpus;
@@ -33,10 +33,12 @@ pub struct EngineConfig {
     pub rb_cap: usize,
     pub tick_capacity: usize,
     pub pool_capacity: usize,
+    pub min_order_qty: u64,
+    pub max_order_qty: u64,
 }
 
 impl EngineConfig {
-    pub fn new(symbol: u32, tick_size: u64, base_px: u64, rb_cap: usize, tick_capacity: usize, pool_capacity: usize) -> Self {
+    pub fn new(symbol: u32, tick_size: u64, base_px: u64, rb_cap: usize, tick_capacity: usize, pool_capacity: usize, min_order_qty: u64, max_order_qty: u64) -> Self {
         Self {
             symbol,
             tick_size,
@@ -44,6 +46,8 @@ impl EngineConfig {
             rb_cap,
             tick_capacity,
             pool_capacity,
+            min_order_qty,
+            max_order_qty,
         }
     }
 }
@@ -77,7 +81,17 @@ impl Engine {
             })
             .unwrap();
 
-        let ob_thread = OrderBookThread::new(config.symbol, config.base_px, config.tick_size, config.tick_capacity, config.pool_capacity, wal_rx, wal_ack_tx);
+        let ob_thread = OrderBookThread::new(
+            config.symbol,
+            config.base_px,
+            config.tick_size,
+            config.tick_capacity,
+            config.pool_capacity,
+            config.min_order_qty,
+            config.max_order_qty,
+            wal_rx,
+            wal_ack_tx,
+        );
         let book_handle = thread::Builder::new()
             .name("mtch-book".to_string())
             .spawn_with_priority(ThreadPriority::Max, move |_| {
@@ -86,7 +100,11 @@ impl Engine {
             })
             .unwrap();
 
-        let ingress = Ingress::new(cmd_tx, resp_rx);
+        let ingress_config = IngressConfig {
+            min_order_qty: config.min_order_qty,
+            max_order_qty: config.max_order_qty,
+        };
+        let ingress = Ingress::new(cmd_tx, resp_rx, ingress_config);
 
         Ok(Self {
             ingress,

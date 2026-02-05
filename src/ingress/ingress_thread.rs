@@ -5,9 +5,16 @@ use crate::error::Error;
 use crate::wal::WalAck;
 use rtrb::{Consumer, Producer};
 
+#[derive(Debug, Clone)]
+pub struct IngressConfig {
+    pub min_order_qty: u64,
+    pub max_order_qty: u64,
+}
+
 pub struct Ingress {
     cmd_tx: Producer<IngressCmd>,
     resp_rx: Consumer<WalAck>,
+    config: IngressConfig,
 }
 
 #[derive(Debug)]
@@ -17,11 +24,16 @@ pub enum CancelOrderResult {
 }
 
 impl Ingress {
-    pub fn new(cmd_tx: Producer<IngressCmd>, resp_rx: Consumer<WalAck>) -> Self {
-        Self { cmd_tx, resp_rx }
+    pub fn new(cmd_tx: Producer<IngressCmd>, resp_rx: Consumer<WalAck>, config: IngressConfig) -> Self {
+        Self { cmd_tx, resp_rx, config }
     }
 
     pub fn add_limit_order(&mut self, order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64) -> Result<OrderBookResponse, Error> {
+        // Validate order quantity before sending to ring buffer
+        if qty < self.config.min_order_qty || qty > self.config.max_order_qty {
+            return Ok(OrderBookResponse::Rejected { order_id });
+        }
+
         self.cmd_tx.push(IngressCmd::AddLimitOrder { order_id, trader_id, side, px, qty }).map_err(|_| Error::BufferFull)?;
 
         loop {
@@ -84,6 +96,11 @@ impl Ingress {
     }
 
     pub fn add_market_order(&mut self, order_id: u64, trader_id: u64, side: Side, qty: u64) -> Result<OrderBookResponse, Error> {
+        // Validate order quantity before sending to ring buffer
+        if qty < self.config.min_order_qty || qty > self.config.max_order_qty {
+            return Ok(OrderBookResponse::Rejected { order_id });
+        }
+
         self.cmd_tx.push(IngressCmd::AddMarketOrder { order_id, trader_id, side, qty }).map_err(|_| Error::BufferFull)?;
 
         loop {
