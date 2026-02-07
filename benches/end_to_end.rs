@@ -2,70 +2,115 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::missing_docs)]
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use mtch::core::Side;
 use mtch::engine::{Engine, EngineConfig};
 use std::hint::black_box;
+use std::time::{Duration, Instant};
 
 fn bench_e2e_add_limit_order(c: &mut Criterion) {
-    c.bench_function("e2e_add_limit_order", |b| {
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
+    let mut group = c.benchmark_group("e2e_add_limit_order");
+    let mut id = 0u64;
 
-        // Create spread: bids @ 9900-9949, asks @ 10000-10049
-        for i in 0..5000 {
-            let _ = engine.add_limit_order(i, 1, Side::Bid, 9900 + (i % 50), 100);
-            let _ = engine.add_limit_order(i + 5000, 1, Side::Ask, 10000 + (i % 50), 100);
-        }
+    for (side, name) in [(Side::Bid, "Buy"), (Side::Ask, "Sell")] {
+        group.bench_with_input(BenchmarkId::from_parameter(name), &side, |b, side| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::ZERO;
+                let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
 
-        let mut id = 10000;
-        let mut px = 9990;
-        b.iter(|| {
-            id += 1;
-            // Add resting bids inside spread (9990-9999 < best ask 10000)
-            px = 9990 + (px % 10);
-            black_box(engine.add_limit_order(id, 2, Side::Bid, px, 100).unwrap())
+                for _ in 0..iters {
+                    let mut engine = Engine::new(config.clone()).unwrap();
+
+                    // add 100 orders on each side to warm up threads
+                    for i in 0..100 {
+                        engine.add_limit_order(i, 1, Side::Bid, 9900 - i, 100).unwrap();
+                        engine.add_limit_order(100 + i, 1, Side::Ask, 10000 + i, 100).unwrap();
+                    }
+                    id = 200;
+
+                    let start = Instant::now();
+                    id += 1;
+                    black_box(engine.add_limit_order(id, 1, *side, 10000, 100).unwrap());
+                    total += start.elapsed();
+                }
+
+                total
+            });
         });
+    }
 
-        let _ = engine.stop();
-    });
+    group.finish();
 }
 
 fn bench_e2e_cancel_order(c: &mut Criterion) {
     c.bench_function("e2e_cancel_order", |b| {
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
+        let mut id = 0u64;
 
-        for i in 0..10000 {
-            let _ = engine.add_limit_order(i, 1, Side::Bid, 9000 + (i % 100), 100);
-        }
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
 
-        let mut cancel_id = 0;
-        b.iter(|| {
-            let result = black_box(engine.cancel_order(cancel_id).unwrap());
-            cancel_id += 1;
-            result
+            for _ in 0..iters {
+                let mut engine = Engine::new(config.clone()).unwrap();
+
+                // add 100 orders on each side to warm up threads
+                for i in 0..100 {
+                    engine.add_limit_order(i, 1, Side::Bid, 9900 - i, 100).unwrap();
+                    engine.add_limit_order(100 + i, 1, Side::Ask, 10000 + i, 100).unwrap();
+                }
+
+                for i in 200..210 {
+                    engine.add_limit_order(i, 1, Side::Bid, 9000 + i, 100).unwrap();
+                }
+
+                let start = Instant::now();
+                black_box(engine.cancel_order(200 + id).unwrap());
+                total += start.elapsed();
+
+                id = (id + 1) % 10;
+            }
+
+            total
         });
-
-        let _ = engine.stop();
     });
 }
 
 fn bench_e2e_market_order(c: &mut Criterion) {
-    c.bench_function("e2e_market_order", |b| {
-        let mut engine = Engine::new(EngineConfig::new(100, 1, 10000, 1024, 128, 16384, 50, 5000)).unwrap();
+    let mut group = c.benchmark_group("e2e_market_order");
+    let mut id = 200u64;
 
-        // 10k asks @ 10000-10099, qty 1000 each (10M total liquidity)
-        for i in 0..10000 {
-            let _ = engine.add_limit_order(i, 1, Side::Ask, 10000 + (i % 100), 1000);
-        }
+    for (side, name) in [(Side::Bid, "Buy"), (Side::Ask, "Sell")] {
+        group.bench_with_input(BenchmarkId::from_parameter(name), &side, |b, side| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::ZERO;
+                let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
 
-        let mut id = 10000;
-        b.iter(|| {
-            id += 1;
-            black_box(engine.add_market_order(id, 2, Side::Bid, 50).unwrap())
+                for _ in 0..iters {
+                    let mut engine = Engine::new(config.clone()).unwrap();
+
+                    // add liquidity to match against
+                    if *side == Side::Bid {
+                        for i in 0..100 {
+                            engine.add_limit_order(i, 1, Side::Ask, 10000 + i, 100).unwrap();
+                        }
+                    } else {
+                        for i in 0..100 {
+                            engine.add_limit_order(i, 1, Side::Bid, 9900 - i, 100).unwrap();
+                        }
+                    }
+
+                    let start = Instant::now();
+                    id += 1;
+                    black_box(engine.add_market_order(id, 2, *side, 600).unwrap());
+                    total += start.elapsed();
+                }
+
+                total
+            });
         });
+    }
 
-        let _ = engine.stop();
-    });
+    group.finish();
 }
 
 criterion_group!(benches, bench_e2e_add_limit_order, bench_e2e_cancel_order, bench_e2e_market_order);
