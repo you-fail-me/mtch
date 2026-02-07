@@ -37,21 +37,6 @@ pub struct EngineConfig {
     pub max_order_qty: u64,
 }
 
-impl EngineConfig {
-    pub fn new(symbol: u32, tick_size: u64, base_px: u64, rb_cap: usize, tick_capacity: usize, pool_capacity: usize, min_order_qty: u64, max_order_qty: u64) -> Self {
-        Self {
-            symbol,
-            tick_size,
-            base_px,
-            rb_cap,
-            tick_capacity,
-            pool_capacity,
-            min_order_qty,
-            max_order_qty,
-        }
-    }
-}
-
 pub struct Engine {
     ingress: Ingress,
     wal_handle: Option<JoinHandle<()>>,

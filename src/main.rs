@@ -2,7 +2,16 @@ use mtch::core::Side;
 use mtch::{Engine, EngineConfig};
 
 fn main() {
-    let config = EngineConfig::new(100, 1, 50000, 1024, 2048, 1048576, 50, 5000);
+    let config = EngineConfig {
+        symbol: 100,
+        tick_size: 1,
+        base_px: 50000,
+        rb_cap: 1024,
+        tick_capacity: 2048,
+        pool_capacity: 1048576,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    };
     let mut engine = Engine::new(config).expect("failed to create engine");
 
     // Limit orders (qty must be >= 50 and <= 5000)

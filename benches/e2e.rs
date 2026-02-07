@@ -16,10 +16,19 @@ fn bench_e2e_add_limit_order(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(name), &side, |b, side| {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
-                let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
 
                 for _ in 0..iters {
-                    let mut engine = Engine::new(config.clone()).unwrap();
+                    let config = EngineConfig {
+                        symbol: 100,
+                        tick_size: 1,
+                        base_px: 10000,
+                        rb_cap: 256,
+                        tick_capacity: 256,
+                        pool_capacity: 256,
+                        min_order_qty: 50,
+                        max_order_qty: 5000,
+                    };
+                    let mut engine = Engine::new(config).unwrap();
 
                     // add 100 orders on each side to warm up threads
                     for i in 0..100 {
@@ -48,10 +57,18 @@ fn bench_e2e_cancel_order(c: &mut Criterion) {
 
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
-            let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
-
             for _ in 0..iters {
-                let mut engine = Engine::new(config.clone()).unwrap();
+                let config = EngineConfig {
+                    symbol: 100,
+                    tick_size: 1,
+                    base_px: 10000,
+                    rb_cap: 256,
+                    tick_capacity: 256,
+                    pool_capacity: 256,
+                    min_order_qty: 50,
+                    max_order_qty: 5000,
+                };
+                let mut engine = Engine::new(config).unwrap();
 
                 // add 100 orders on each side to warm up threads
                 for i in 0..100 {
@@ -83,10 +100,19 @@ fn bench_e2e_market_order(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(name), &side, |b, side| {
             b.iter_custom(|iters| {
                 let mut total = Duration::ZERO;
-                let config = EngineConfig::new(100, 1, 10000, 256, 256, 256, 50, 5000);
 
                 for _ in 0..iters {
-                    let mut engine = Engine::new(config.clone()).unwrap();
+                    let config = EngineConfig {
+                        symbol: 100,
+                        tick_size: 1,
+                        base_px: 10000,
+                        rb_cap: 256,
+                        tick_capacity: 256,
+                        pool_capacity: 256,
+                        min_order_qty: 50,
+                        max_order_qty: 5000,
+                    };
+                    let mut engine = Engine::new(config).unwrap();
 
                     // add liquidity to match against
                     if *side == Side::Bid {
