@@ -71,7 +71,7 @@ impl WalThread {
                         let _ = self.ingress_tx.push(ack);
 
                         // Pass on to matcher
-                        let match_cmd = MatchCmd::CancelOrder { order_id, seq: self.seqr.next() };
+                        let match_cmd = MatchCmd::CancelOrder { order_id, seq };
                         let _ = self.book_tx.push(match_cmd);
                     }
                     IngressCmd::Shutdown => {
