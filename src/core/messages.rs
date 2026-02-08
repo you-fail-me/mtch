@@ -3,7 +3,7 @@ use crate::core::order_book::{BookSnapshot, Fill};
 
 #[derive(Debug, Clone)]
 pub enum IngressCmd {
-    AddLimitOrder { order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64 },
+    AddLimitOrder { order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64, slot_id: u64 },
     AddMarketOrder { order_id: u64, trader_id: u64, side: Side, qty: u64 },
     CancelOrder { order_id: u64 },
     GetSnapshot,
@@ -23,7 +23,7 @@ pub enum OrderBookResponse {
 
 #[derive(Debug, Clone)]
 pub enum MatchCmd {
-    AddLimitOrder { order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64, seq: u64 },
+    AddLimitOrder { order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64, seq: u64, slot_id: u64 },
     AddMarketOrder { order_id: u64, trader_id: u64, side: Side, qty: u64, seq: u64 },
     CancelOrder { order_id: u64, seq: u64 },
     GetSnapshot,

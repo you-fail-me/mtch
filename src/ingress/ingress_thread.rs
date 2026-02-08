@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use crate::core::capacity::{Capacity, ReserveResult};
 use crate::core::messages::{IngressCmd, OrderBookResponse};
 use crate::core::order::Side;
 use crate::core::order_book::BookSnapshot;
@@ -15,6 +18,7 @@ pub struct Ingress {
     cmd_tx: Producer<IngressCmd>,
     resp_rx: Consumer<WalAck>,
     config: IngressConfig,
+    capacity: Arc<Capacity>,
 }
 
 #[derive(Debug)]
@@ -24,8 +28,8 @@ pub enum CancelOrderResult {
 }
 
 impl Ingress {
-    pub fn new(cmd_tx: Producer<IngressCmd>, resp_rx: Consumer<WalAck>, config: IngressConfig) -> Self {
-        Self { cmd_tx, resp_rx, config }
+    pub fn new(cmd_tx: Producer<IngressCmd>, resp_rx: Consumer<WalAck>, config: IngressConfig, capacity: Arc<Capacity>) -> Self {
+        Self { cmd_tx, resp_rx, config, capacity }
     }
 
     pub fn add_limit_order(&mut self, order_id: u64, trader_id: u64, side: Side, px: u64, qty: u64) -> Result<OrderBookResponse, Error> {
@@ -34,7 +38,15 @@ impl Ingress {
             return Ok(OrderBookResponse::Rejected { order_id });
         }
 
-        self.cmd_tx.push(IngressCmd::AddLimitOrder { order_id, trader_id, side, px, qty }).map_err(|_| Error::BufferFull)?;
+        // Try to reserve a slot before committing to WAL
+        let slot_id = match self.capacity.reserve() {
+            ReserveResult::Reserved(id) => id,
+            ReserveResult::CapacityExceeded => {
+                return Ok(OrderBookResponse::Rejected { order_id });
+            }
+        };
+
+        self.cmd_tx.push(IngressCmd::AddLimitOrder { order_id, trader_id, side, px, qty, slot_id }).map_err(|_| Error::BufferFull)?;
 
         loop {
             if let Ok(resp) = self.resp_rx.pop() {

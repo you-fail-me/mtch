@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use crate::core::capacity::Capacity;
 use crate::core::messages::{MatchCmd, OrderBookResponse};
 use crate::core::order::Order;
 use crate::core::order_book::OrderBook;
@@ -30,40 +33,45 @@ impl OrderBookThread {
         }
     }
 
-    pub fn run(mut self) {
-        let mut book = OrderBook::new(self.tick_capacity, self.pool_capacity, self.symbol, self.tick_size, self.base_px, self.min_order_qty, self.max_order_qty);
+    pub fn run(mut self, capacity: Arc<Capacity>) {
+        let mut book = OrderBook::new(self.tick_capacity, self.pool_capacity, self.symbol, self.tick_size, self.base_px, self.min_order_qty, self.max_order_qty, capacity);
 
         loop {
             if let Ok(cmd) = self.cmd_rx.pop() {
                 match cmd {
-                    MatchCmd::AddLimitOrder { order_id, trader_id, side, px, qty, seq } => {
+                    MatchCmd::AddLimitOrder {
+                        order_id,
+                        trader_id,
+                        side,
+                        px,
+                        qty,
+                        seq,
+                        slot_id,
+                    } => {
                         #[cfg(debug_assertions)]
                         println!("[BOOK] limit order_id {} seq {} received", order_id, seq);
 
                         let order = Order::new_limit(order_id, trader_id, side, px, qty, order_id);
-                        let res = book.add_order(order, seq);
+                        book.add_order(order, seq, slot_id);
 
                         #[cfg(debug_assertions)]
-                        println!("[BOOK] limit order_id {} seq {} processed with result {:?}", order_id, seq, res);
+                        println!("[BOOK] limit order_id {} seq {} processed", order_id, seq);
                     }
                     MatchCmd::AddMarketOrder { order_id, trader_id, side, qty, seq } => {
                         #[cfg(debug_assertions)]
                         println!("[BOOK] market order_id {} seq {} received", order_id, seq);
 
                         let order = Order::new_market(order_id, trader_id, side, qty, order_id);
-                        let res = book.add_order(order, seq);
+                        book.add_order(order, seq, 0); // Market orders don't use slots
 
                         #[cfg(debug_assertions)]
-                        println!("[BOOK] market order_id {} seq {} processed with result {:?}", order_id, seq, res);
+                        println!("[BOOK] market order_id {} seq {} processed", order_id, seq);
                     }
                     MatchCmd::CancelOrder { order_id, seq } => {
                         #[cfg(debug_assertions)]
                         println!("[BOOK] cancel order_id {} seq {} received", order_id, seq);
 
-                        let res = book.cancel_order(order_id);
-
-                        #[cfg(debug_assertions)]
-                        println!("[BOOK] cancel order_id {} seq {} processed with result {:?}", order_id, seq, res);
+                        book.cancel_order(order_id);
                     }
                     MatchCmd::GetSnapshot => {
                         let snapshot = book.snapshot();

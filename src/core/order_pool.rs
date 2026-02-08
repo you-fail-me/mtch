@@ -1,4 +1,6 @@
-use crate::core::free_list::FreeList;
+use std::sync::Arc;
+
+use crate::core::capacity::Capacity;
 use crate::core::order::{Handle, Order, Side};
 
 // Not pretty but avoids the unsafe of MaybeUninit and the overhead of Option
@@ -13,19 +15,18 @@ struct Slot {
     alive: bool,
 }
 
-/// Fixed-capacity order allocator with generational handles, O(1) alloc/dealloc/get.
+/// Fixed-capacity order storage with generational handles.
 pub struct OrderPool {
     slots: Box<[Slot]>,
-    pub free_list: FreeList,
-    pub bump_idx: usize,
     pub live_count: usize,
+    capacity: Arc<Capacity>,
 }
 
 impl OrderPool {
-    pub fn new(capacity: usize) -> Self {
-        let mut vec: Vec<Slot> = Vec::with_capacity(capacity);
+    pub fn new(pool_capacity: usize, capacity: Arc<Capacity>) -> Self {
+        let mut vec: Vec<Slot> = Vec::with_capacity(pool_capacity);
 
-        for _ in 0..capacity {
+        for _ in 0..pool_capacity {
             vec.push(Slot {
                 order: placeholder_order(),
                 generation: 0,
@@ -34,36 +35,18 @@ impl OrderPool {
         }
         let slots = vec.into_boxed_slice();
 
-        OrderPool {
-            slots,
-            bump_idx: 0,
-            free_list: FreeList::new(capacity),
-            live_count: 0,
-        }
-    }
-
-    /// Allocates space for an order and returns a handle.
-    pub fn alloc(&mut self, order: Order) -> Option<(Handle, &mut Order)> {
-        if let Some(recycled_idx) = self.free_list.pop() {
-            return self.alloc_at(recycled_idx, order);
-        }
-
-        if self.bump_idx < self.slots.len() {
-            let idx = self.bump_idx;
-            self.bump_idx += 1;
-            return self.alloc_at(idx, order);
-        }
-
-        None
+        OrderPool { slots, live_count: 0, capacity }
     }
 
     pub fn dealloc(&mut self, handle: Handle) {
         let idx = handle.idx;
         if idx < self.slots.len() {
             let slot = &mut self.slots[idx];
-            slot.alive = false;
-            self.free_list.push(handle.idx);
-            self.live_count = self.live_count.saturating_sub(1);
+            if slot.alive {
+                slot.alive = false;
+                self.live_count = self.live_count.saturating_sub(1);
+                self.capacity.release(idx as u64);
+            }
         }
     }
 
@@ -107,7 +90,9 @@ impl OrderPool {
         Some(&mut slot.order)
     }
 
-    fn alloc_at(&mut self, idx: usize, order: Order) -> Option<(Handle, &mut Order)> {
+    /// Allocate an order at a specific slot index (for pre-reserved slots from Capacity)
+    pub fn alloc_at_slot(&mut self, slot_id: u64, order: Order) -> Option<(Handle, &mut Order)> {
+        let idx = slot_id as usize;
         if idx >= self.slots.len() {
             return None;
         }

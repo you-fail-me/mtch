@@ -17,13 +17,13 @@ impl PriceLevel {
         Self { px, qty: 0, count: 0, head: None, tail: None }
     }
 
-    // Adds an order to the tail, to maintain price-time priority
-    pub fn add_order(&mut self, order: Order, pool: &mut OrderPool) -> Option<(Handle, bool)> {
+    // Adds an order to the tail to maintain price-time priority
+    pub fn add_order(&mut self, order: Order, pool: &mut OrderPool, slot_id: u64) -> Option<(Handle, bool)> {
         let was_empty = self.is_empty();
 
         let qty = order.qty;
-        // Allocate
-        let (handle, order_ptr) = pool.alloc(order)?;
+        let (handle, order_ptr) = pool.alloc_at_slot(slot_id, order)?;
+
         // Update price level metrics
         self.qty += qty;
         self.count += 1;

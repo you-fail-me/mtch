@@ -1,10 +1,13 @@
+use std::cmp::Ordering;
+use std::sync::Arc;
+
+use crate::core::capacity::Capacity;
 use crate::core::fill_buffer::FillBuffer;
 use crate::core::order::{Handle, Order, OrderLocation, OrderType, Side};
 use crate::core::order_index::OrderIndex;
 use crate::core::order_pool::OrderPool;
 use crate::core::price_level::PriceLevel;
 use crate::core::tick_array::TickArray;
-use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Fill {
@@ -45,7 +48,6 @@ pub struct BookSnapshot {
 pub struct OrderBook {
     symbol: u32,
     tick_size: u64,
-    pool_capacity: usize,
     min_order_qty: u64,
     max_order_qty: u64,
 
@@ -57,15 +59,14 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
-    pub fn new(tick_capacity: usize, pool_capacity: usize, symbol: u32, tick_size: u64, base_px: u64, min_order_qty: u64, max_order_qty: u64) -> Self {
+    pub fn new(tick_capacity: usize, pool_capacity: usize, symbol: u32, tick_size: u64, base_px: u64, min_order_qty: u64, max_order_qty: u64, capacity: Arc<Capacity>) -> Self {
         let max_fills = (max_order_qty / min_order_qty) as usize;
         Self {
             symbol,
             tick_size,
-            pool_capacity,
             min_order_qty,
             max_order_qty,
-            pool: OrderPool::new(pool_capacity),
+            pool: OrderPool::new(pool_capacity, capacity),
             bids: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Less),
             asks: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Greater),
             order_index: OrderIndex::new(pool_capacity),
@@ -109,7 +110,7 @@ impl OrderBook {
         BookSnapshot { symbol: self.symbol, bids, asks }
     }
 
-    pub fn add_order(&mut self, mut order: Order, seq: u64) -> AddOrderResult {
+    pub fn add_order(&mut self, mut order: Order, seq: u64, slot_id: u64) -> AddOrderResult {
         // Validate order quantity
         if order.qty < self.min_order_qty || order.qty > self.max_order_qty {
             return AddOrderResult::Rejected;
@@ -120,12 +121,6 @@ impl OrderBook {
                 Side::Bid => u64::MAX,
                 Side::Ask => 0,
             };
-        }
-
-        if order.order_type == OrderType::Limit {
-            if self.pool.live_count >= self.pool_capacity {
-                return AddOrderResult::Rejected;
-            }
         }
 
         self.fill_buffer.drain();
@@ -141,7 +136,7 @@ impl OrderBook {
         if order.qty == 0 {
             AddOrderResult::Filled { remaining_qty: 0 }
         } else {
-            if self.add_to_level(order).is_none() {
+            if self.add_to_level(order, slot_id).is_none() {
                 return AddOrderResult::Rejected;
             }
             AddOrderResult::Added
@@ -156,31 +151,37 @@ impl OrderBook {
 
         match location.side {
             Side::Bid => {
-                if let Some(idx) = self.bids.index(location.px, self.tick_size, Side::Bid) {
-                    let level = &mut self.bids.levels[idx];
-                    if let Some(became_empty) = level.remove_order(location.handle, &mut self.pool) {
-                        if became_empty {
-                            self.bids.decrement_non_empty();
-                        }
-                        self.pool.dealloc(location.handle);
-                        return CancelResult::Cancelled;
-                    }
+                let idx = match self.bids.index(location.px, self.tick_size, Side::Bid) {
+                    Some(i) => i,
+                    None => return CancelResult::NotFound,
+                };
+                let level = &mut self.bids.levels[idx];
+                let became_empty = match level.remove_order(location.handle, &mut self.pool) {
+                    Some(b) => b,
+                    None => return CancelResult::NotFound,
+                };
+                if became_empty {
+                    self.bids.decrement_non_empty();
                 }
             }
             Side::Ask => {
-                if let Some(idx) = self.asks.index(location.px, self.tick_size, Side::Ask) {
-                    let level = &mut self.asks.levels[idx];
-                    if let Some(became_empty) = level.remove_order(location.handle, &mut self.pool) {
-                        if became_empty {
-                            self.asks.decrement_non_empty();
-                        }
-                        self.pool.dealloc(location.handle);
-                        return CancelResult::Cancelled;
-                    }
+                let idx = match self.asks.index(location.px, self.tick_size, Side::Ask) {
+                    Some(i) => i,
+                    None => return CancelResult::NotFound,
+                };
+                let level = &mut self.asks.levels[idx];
+                let became_empty = match level.remove_order(location.handle, &mut self.pool) {
+                    Some(b) => b,
+                    None => return CancelResult::NotFound,
+                };
+                if became_empty {
+                    self.asks.decrement_non_empty();
                 }
             }
-        }
-        CancelResult::NotFound
+        };
+
+        self.pool.dealloc(location.handle);
+        CancelResult::Cancelled
     }
 
     fn try_match(&mut self, order: &mut Order, seq: u64) {
@@ -275,6 +276,7 @@ impl OrderBook {
             }
 
             let match_qty = taker_order.qty.min(maker_qty);
+            let maker_fully_filled = match_qty == maker_qty;
 
             fills.push(Fill {
                 taker_order_id: taker_order.id,
@@ -286,7 +288,7 @@ impl OrderBook {
 
             taker_order.qty -= match_qty;
 
-            if match_qty == maker_qty {
+            if maker_fully_filled {
                 current = next;
                 level.remove_order(handle, pool);
                 pool.dealloc(handle);
@@ -300,7 +302,7 @@ impl OrderBook {
         level.is_empty()
     }
 
-    fn add_to_level(&mut self, order: Order) -> Option<Handle> {
+    fn add_to_level(&mut self, order: Order, slot_id: u64) -> Option<Handle> {
         let order_id = order.id;
         let side = order.side;
         let px = order.px;
@@ -308,12 +310,12 @@ impl OrderBook {
         let (handle, became_non_empty) = match side {
             Side::Bid => {
                 let level = self.bids.level_mut(px, self.tick_size, Side::Bid)?;
-                let (h, became) = level.add_order(order, &mut self.pool)?;
+                let (h, became) = level.add_order(order, &mut self.pool, slot_id)?;
                 (h, became)
             }
             Side::Ask => {
                 let level = self.asks.level_mut(px, self.tick_size, Side::Ask)?;
-                let (h, became) = level.add_order(order, &mut self.pool)?;
+                let (h, became) = level.add_order(order, &mut self.pool, slot_id)?;
                 (h, became)
             }
         };

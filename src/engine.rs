@@ -1,3 +1,11 @@
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+
+use core_affinity::{CoreId, get_core_ids, set_for_current};
+use num_cpus;
+use thread_priority::{ThreadBuilderExt, ThreadPriority};
+
+use crate::core::Capacity;
 use crate::core::OrderBookThread;
 use crate::core::messages::OrderBookResponse;
 use crate::core::order::Side;
@@ -5,10 +13,6 @@ use crate::core::order_book::BookSnapshot;
 use crate::error::Error;
 use crate::ingress::{CancelOrderResult, Ingress, IngressConfig};
 use crate::wal::WalThread;
-use core_affinity::{CoreId, get_core_ids, set_for_current};
-use num_cpus;
-use std::thread::{self, JoinHandle};
-use thread_priority::{ThreadBuilderExt, ThreadPriority};
 
 fn get_separate_physical_cores() -> (CoreId, CoreId, CoreId) {
     let physical_cores = num_cpus::get_physical();
@@ -57,6 +61,11 @@ impl Engine {
         // Pin Main Thread to Core 0
         set_for_current(main_core);
 
+        // Create shared Capacity for slot reservation
+        let capacity = Arc::new(Capacity::new(config.pool_capacity as u64));
+        let capacity_for_ingress = Arc::clone(&capacity);
+        let capacity_for_book = Arc::clone(&capacity);
+
         let wal_thread = WalThread::new(cmd_rx, resp_tx, wal_ack_rx, wal_tx);
         let wal_handle = thread::Builder::new()
             .name("mtch-wal".to_string())
@@ -81,7 +90,7 @@ impl Engine {
             .name("mtch-book".to_string())
             .spawn_with_priority(ThreadPriority::Max, move |_| {
                 set_for_current(book_core);
-                ob_thread.run()
+                ob_thread.run(capacity_for_book)
             })
             .unwrap();
 
@@ -89,7 +98,7 @@ impl Engine {
             min_order_qty: config.min_order_qty,
             max_order_qty: config.max_order_qty,
         };
-        let ingress = Ingress::new(cmd_tx, resp_rx, ingress_config);
+        let ingress = Ingress::new(cmd_tx, resp_rx, ingress_config, capacity_for_ingress);
 
         Ok(Self {
             ingress,

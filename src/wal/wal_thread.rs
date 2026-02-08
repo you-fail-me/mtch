@@ -26,7 +26,7 @@ impl WalThread {
         loop {
             if let Ok(entry) = self.ingress_rx.pop() {
                 match entry {
-                    IngressCmd::AddLimitOrder { order_id, trader_id, side, px, qty } => {
+                    IngressCmd::AddLimitOrder { order_id, trader_id, side, px, qty, slot_id } => {
                         let seq = self.seqr.next();
 
                         // TODO: Persist
@@ -42,8 +42,16 @@ impl WalThread {
                         };
                         let _ = self.ingress_tx.push(ack);
 
-                        // Pass on to matcher
-                        let match_cmd = MatchCmd::AddLimitOrder { order_id, trader_id, side, px, qty, seq };
+                        // Pass on to matcher with slot_id
+                        let match_cmd = MatchCmd::AddLimitOrder {
+                            order_id,
+                            trader_id,
+                            side,
+                            px,
+                            qty,
+                            seq,
+                            slot_id,
+                        };
                         let _ = self.book_tx.push(match_cmd);
                     }
                     IngressCmd::CancelOrder { order_id } => {
