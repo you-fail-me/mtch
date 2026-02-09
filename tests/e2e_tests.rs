@@ -1,11 +1,22 @@
-mod e2e;
-
-use e2e::*;
 use mtch::core::Side;
+use mtch::{Engine, EngineConfig};
+
+mod e2e;
+use e2e::*;
 
 #[test]
 fn test_add_limit_orders_no_match() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp1 = engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     assert_added(resp1);
@@ -19,7 +30,17 @@ fn test_add_limit_orders_no_match() {
 
 #[test]
 fn test_cancel_existing_order() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp = engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     assert_added(resp);
@@ -33,7 +54,17 @@ fn test_cancel_existing_order() {
 
 #[test]
 fn test_cancel_non_existent() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let cancel_resp = engine.cancel_order(999).unwrap();
     assert_cancelled(cancel_resp);
@@ -45,7 +76,17 @@ fn test_cancel_non_existent() {
 
 #[test]
 fn test_snapshot_reflects_book_state() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Bid, 99, 50).unwrap();
@@ -58,7 +99,17 @@ fn test_snapshot_reflects_book_state() {
 
 #[test]
 fn test_limit_order_full_fill_exact() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Bid, 100, 50).unwrap();
@@ -69,7 +120,17 @@ fn test_limit_order_full_fill_exact() {
 
 #[test]
 fn test_limit_order_partial_fill_aggressive_rests() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Bid, 100, 75).unwrap();
@@ -80,7 +141,17 @@ fn test_limit_order_partial_fill_aggressive_rests() {
 
 #[test]
 fn test_limit_order_partial_fill_resting_remains() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 75).unwrap();
     engine.add_limit_order(2, 101, Side::Bid, 100, 50).unwrap();
@@ -91,7 +162,17 @@ fn test_limit_order_partial_fill_resting_remains() {
 
 #[test]
 fn test_limit_order_sweeps_multiple_levels() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Ask, 101, 50).unwrap();
@@ -104,7 +185,17 @@ fn test_limit_order_sweeps_multiple_levels() {
 
 #[test]
 fn test_limit_order_no_match_rests() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp1 = engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     assert_added(resp1);
@@ -118,7 +209,17 @@ fn test_limit_order_no_match_rests() {
 
 #[test]
 fn test_market_buy_full_fill() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_market_order(2, 101, Side::Bid, 50).unwrap();
@@ -130,7 +231,17 @@ fn test_market_buy_full_fill() {
 
 #[test]
 fn test_market_sell_full_fill() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     engine.add_market_order(2, 101, Side::Ask, 50).unwrap();
@@ -142,7 +253,17 @@ fn test_market_sell_full_fill() {
 
 #[test]
 fn test_market_order_sweeps_levels() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Ask, 101, 50).unwrap();
@@ -155,7 +276,17 @@ fn test_market_order_sweeps_levels() {
 
 #[test]
 fn test_market_order_rejected_no_liquidity() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_market_order(1, 100, Side::Bid, 50).unwrap();
 
@@ -166,7 +297,17 @@ fn test_market_order_rejected_no_liquidity() {
 
 #[test]
 fn test_price_priority_best_price_first() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 101, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Ask, 100, 50).unwrap();
@@ -178,7 +319,17 @@ fn test_price_priority_best_price_first() {
 
 #[test]
 fn test_time_priority_fifo_same_price() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Ask, 100, 50).unwrap();
@@ -190,7 +341,17 @@ fn test_time_priority_fifo_same_price() {
 
 #[test]
 fn test_fifo_across_multiple_fills() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Ask, 100, 50).unwrap();
@@ -203,7 +364,17 @@ fn test_fifo_across_multiple_fills() {
 
 #[test]
 fn test_self_trade_prevented() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 50, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 50, Side::Bid, 100, 50).unwrap();
@@ -214,7 +385,17 @@ fn test_self_trade_prevented() {
 
 #[test]
 fn test_self_trade_skips_to_next_order() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 50, Side::Ask, 100, 50).unwrap();
     engine.add_limit_order(2, 60, Side::Ask, 100, 50).unwrap();
@@ -226,7 +407,17 @@ fn test_self_trade_skips_to_next_order() {
 
 #[test]
 fn test_realistic_trading_scenario() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Bid, 99, 50).unwrap();
     engine.add_limit_order(2, 101, Side::Bid, 100, 75).unwrap();
@@ -250,7 +441,17 @@ fn test_realistic_trading_scenario() {
 
 #[test]
 fn test_order_below_min_rejected() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp = engine.add_limit_order(1, 100, Side::Bid, 100, 49).unwrap();
     assert_rejected(resp);
@@ -261,7 +462,17 @@ fn test_order_below_min_rejected() {
 
 #[test]
 fn test_order_at_min_accepted() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp = engine.add_limit_order(1, 100, Side::Bid, 100, 50).unwrap();
     assert_added(resp);
@@ -272,7 +483,17 @@ fn test_order_at_min_accepted() {
 
 #[test]
 fn test_order_at_max_accepted() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp = engine.add_limit_order(1, 100, Side::Bid, 100, 5000).unwrap();
     assert_added(resp);
@@ -283,7 +504,17 @@ fn test_order_at_max_accepted() {
 
 #[test]
 fn test_order_above_max_rejected() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     let resp = engine.add_limit_order(1, 100, Side::Bid, 100, 5001).unwrap();
     assert_rejected(resp);
@@ -294,7 +525,17 @@ fn test_order_above_max_rejected() {
 
 #[test]
 fn test_market_order_below_min_rejected() {
-    let mut engine = setup_engine(100, 1);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 131072,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     engine.add_limit_order(1, 100, Side::Ask, 100, 100).unwrap();
 
@@ -309,7 +550,17 @@ fn test_market_order_below_min_rejected() {
 #[test]
 fn test_capacity_limit_order_rejected_market_order_accepted() {
     // Create engine with very small pool capacity (2 slots)
-    let mut engine = setup_engine_with_pool_capacity(100, 1, 2);
+    let mut engine = Engine::new(EngineConfig {
+        symbol: 1100,
+        tick_size: 1,
+        base_px: 100,
+        rb_cap: 1024,
+        tick_capacity: 64,
+        pool_capacity: 2,
+        min_order_qty: 50,
+        max_order_qty: 5000,
+    })
+    .unwrap();
 
     // First, add a resting bid order to provide liquidity for market sells
     let resp1 = engine.add_limit_order(1, 100, Side::Bid, 99, 50).unwrap();

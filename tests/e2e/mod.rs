@@ -1,35 +1,6 @@
 use mtch::core::BookSnapshot;
 use mtch::core::messages::OrderBookResponse;
 use mtch::ingress::CancelOrderResult;
-use mtch::{Engine, EngineConfig};
-
-pub fn setup_engine(base_px: u64, tick_size: u64) -> Engine {
-    let config = EngineConfig {
-        symbol: 1100,
-        tick_size,
-        base_px,
-        rb_cap: 1024,
-        tick_capacity: 64,
-        pool_capacity: 131072,
-        min_order_qty: 50,
-        max_order_qty: 5000,
-    };
-    Engine::new(config).expect("failed to create engine")
-}
-
-pub fn setup_engine_with_pool_capacity(base_px: u64, tick_size: u64, pool_capacity: usize) -> Engine {
-    let config = EngineConfig {
-        symbol: 1100,
-        tick_size,
-        base_px,
-        rb_cap: 1024,
-        tick_capacity: 64,
-        pool_capacity,
-        min_order_qty: 50,
-        max_order_qty: 5000,
-    };
-    Engine::new(config).expect("failed to create engine")
-}
 
 pub fn assert_book(snapshot: &BookSnapshot, expected_bids: &[(u64, u64)], expected_asks: &[(u64, u64)]) {
     assert_eq!(
