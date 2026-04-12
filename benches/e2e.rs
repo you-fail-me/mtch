@@ -3,8 +3,8 @@
 #![allow(clippy::missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use mtch::core::Side;
 use mtch::engine::{Engine, EngineConfig};
+use mtch::matcher::Side;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 

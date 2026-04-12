@@ -1,5 +1,5 @@
-use crate::core::order::{OrderType, Side};
-use crate::core::order_book::{BookSnapshot, Fill};
+use crate::matcher::order::{OrderType, Side};
+use crate::matcher::order_book::{BookSnapshot, Fill};
 
 #[derive(Debug, Clone)]
 pub enum IngressCmd {

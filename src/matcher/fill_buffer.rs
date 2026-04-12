@@ -1,4 +1,4 @@
-use crate::core::order_book::Fill;
+use crate::matcher::order_book::Fill;
 
 pub struct FillBuffer {
     slots: Box<[Fill]>,

@@ -1,6 +1,6 @@
-use mtch::core::BookSnapshot;
-use mtch::core::messages::OrderBookResponse;
 use mtch::ingress::CancelOrderResult;
+use mtch::matcher::BookSnapshot;
+use mtch::matcher::messages::OrderBookResponse;
 
 pub fn assert_book(snapshot: &BookSnapshot, expected_bids: &[(u64, u64)], expected_asks: &[(u64, u64)]) {
     assert_eq!(

@@ -5,13 +5,13 @@ use core_affinity::{CoreId, get_core_ids, set_for_current};
 use num_cpus;
 use thread_priority::{ThreadBuilderExt, ThreadPriority};
 
-use crate::core::Capacity;
-use crate::core::OrderBookThread;
-use crate::core::messages::OrderBookResponse;
-use crate::core::order::Side;
-use crate::core::order_book::BookSnapshot;
 use crate::error::Error;
 use crate::ingress::{CancelOrderResult, Ingress, IngressConfig};
+use crate::matcher::Capacity;
+use crate::matcher::OrderBookThread;
+use crate::matcher::messages::OrderBookResponse;
+use crate::matcher::order::Side;
+use crate::matcher::order_book::BookSnapshot;
 use crate::wal::WalThread;
 
 fn get_separate_physical_cores() -> (CoreId, CoreId, CoreId) {

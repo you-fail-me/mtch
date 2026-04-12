@@ -1,6 +1,6 @@
-use crate::core::free_list::FreeList;
-use crate::core::order::OrderLocation;
 use crate::error::Error;
+use crate::matcher::free_list::FreeList;
+use crate::matcher::order::OrderLocation;
 
 /// Fixed-capacity order index with O(1) operations and ID recycling.
 pub struct OrderIndex {

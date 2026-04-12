@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use crate::core::capacity::Capacity;
-use crate::core::fill_buffer::FillBuffer;
-use crate::core::order::{Handle, Order, OrderLocation, OrderType, Side};
-use crate::core::order_index::OrderIndex;
-use crate::core::order_pool::OrderPool;
-use crate::core::price_level::PriceLevel;
-use crate::core::tick_array::TickArray;
+use crate::matcher::capacity::Capacity;
+use crate::matcher::fill_buffer::FillBuffer;
+use crate::matcher::order::{Handle, Order, OrderLocation, OrderType, Side};
+use crate::matcher::order_index::OrderIndex;
+use crate::matcher::order_pool::OrderPool;
+use crate::matcher::price_level::PriceLevel;
+use crate::matcher::tick_array::TickArray;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Fill {

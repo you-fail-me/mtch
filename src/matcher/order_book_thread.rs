@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::core::capacity::Capacity;
-use crate::core::messages::{MatchCmd, OrderBookResponse};
-use crate::core::order::Order;
-use crate::core::order_book::OrderBook;
+use crate::matcher::capacity::Capacity;
+use crate::matcher::messages::{MatchCmd, OrderBookResponse};
+use crate::matcher::order::Order;
+use crate::matcher::order_book::OrderBook;
 use rtrb::{Consumer, Producer};
 
 pub struct OrderBookThread {

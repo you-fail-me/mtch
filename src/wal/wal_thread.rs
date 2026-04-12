@@ -1,4 +1,4 @@
-use crate::core::messages::{IngressCmd, MatchCmd, OrderBookResponse};
+use crate::matcher::messages::{IngressCmd, MatchCmd, OrderBookResponse};
 use crate::wal::messages::{WalAck, WalEntryType};
 use crate::wal::sequencer::Sequencer;
 use rtrb::{Consumer, Producer};

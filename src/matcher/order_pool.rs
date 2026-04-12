@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use crate::core::capacity::Capacity;
-use crate::core::order::{Handle, Order, Side};
+use crate::matcher::capacity::Capacity;
+use crate::matcher::order::{Handle, Order, Side};
 
 // Not pretty but avoids the unsafe of MaybeUninit and the overhead of Option
 fn placeholder_order() -> Order {

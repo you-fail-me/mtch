@@ -1,4 +1,4 @@
-use crate::core::order_book::BookSnapshot;
+use crate::matcher::order_book::BookSnapshot;
 
 #[derive(Debug, Clone)]
 pub enum WalEntry {

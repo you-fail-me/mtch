@@ -1,5 +1,5 @@
-use crate::core::order::{Handle, Order};
-use crate::core::order_pool::OrderPool;
+use crate::matcher::order::{Handle, Order};
+use crate::matcher::order_pool::OrderPool;
 
 // TODO: use Result<(), E> and propagate errors instead of Option<()>
 

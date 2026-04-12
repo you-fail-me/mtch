@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::core::capacity::{Capacity, ReserveResult};
-use crate::core::messages::{IngressCmd, OrderBookResponse};
-use crate::core::order::Side;
-use crate::core::order_book::BookSnapshot;
 use crate::error::Error;
+use crate::matcher::capacity::{Capacity, ReserveResult};
+use crate::matcher::messages::{IngressCmd, OrderBookResponse};
+use crate::matcher::order::Side;
+use crate::matcher::order_book::BookSnapshot;
 use crate::wal::WalAck;
 use rtrb::{Consumer, Producer};
 

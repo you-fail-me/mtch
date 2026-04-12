@@ -1,4 +1,4 @@
-use mtch::core::Side;
+use mtch::matcher::Side;
 use mtch::{Engine, EngineConfig};
 
 fn main() {

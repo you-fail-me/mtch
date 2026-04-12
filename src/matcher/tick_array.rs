@@ -1,5 +1,5 @@
-use crate::core::order::Side;
-use crate::core::price_level::PriceLevel;
+use crate::matcher::order::Side;
+use crate::matcher::price_level::PriceLevel;
 use std::cmp::Ordering;
 
 pub struct TickArray {

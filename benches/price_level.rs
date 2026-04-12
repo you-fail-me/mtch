@@ -6,7 +6,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use mtch::core::{Capacity, Order, OrderPool, PriceLevel, Side};
+use mtch::matcher::{Capacity, Order, OrderPool, PriceLevel, Side};
 
 fn bench_place_order(c: &mut Criterion) {
     let mut group = c.benchmark_group("price_level_place");

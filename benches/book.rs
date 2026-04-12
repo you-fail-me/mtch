@@ -6,7 +6,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use mtch::core::{Capacity, Order, OrderBook, Side};
+use mtch::matcher::{Capacity, Order, OrderBook, Side};
 
 fn bench_add_limit_order(c: &mut Criterion) {
     let mut group = c.benchmark_group("book_add_limit");
