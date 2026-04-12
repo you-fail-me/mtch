@@ -16,9 +16,9 @@ fn placeholder_fill() -> Fill {
 }
 
 impl FillBuffer {
-    pub fn new(capacity: usize) -> Self {
-        let mut vec = Vec::with_capacity(capacity);
-        for _ in 0..capacity {
+    pub fn new(capacity: u64) -> Self {
+        let mut vec = Vec::with_capacity(capacity as usize);
+        for _ in 0..capacity as usize {
             vec.push(placeholder_fill());
         }
         Self { slots: vec.into_boxed_slice(), count: 0 }

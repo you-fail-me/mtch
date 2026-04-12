@@ -12,8 +12,8 @@ pub enum OrderType {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Handle {
-    pub idx: usize,
-    pub generation: usize,
+    pub idx: u64,
+    pub generation: u64,
 }
 
 #[derive(Debug, Clone, Copy)]

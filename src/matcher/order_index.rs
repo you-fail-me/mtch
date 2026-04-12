@@ -11,10 +11,10 @@ pub struct OrderIndex {
 }
 
 impl OrderIndex {
-    pub fn new(capacity: usize) -> Self {
-        let mut vec: Vec<Option<OrderLocation>> = Vec::with_capacity(capacity);
+    pub fn new(capacity: u64) -> Self {
+        let mut vec: Vec<Option<OrderLocation>> = Vec::with_capacity(capacity as usize);
 
-        for _ in 0..capacity {
+        for _ in 0..capacity as usize {
             vec.push(None);
         }
         let entries = vec.into_boxed_slice();
@@ -29,7 +29,7 @@ impl OrderIndex {
 
     pub fn next_id(&mut self) -> u64 {
         if let Some(recycled_id) = self.free_list.pop() {
-            recycled_id as u64
+            recycled_id
         } else {
             let id = self.next_id;
             self.next_id += 1;
@@ -57,7 +57,7 @@ impl OrderIndex {
         let location = self.entries[idx].take();
         if location.is_some() {
             self.live_count = self.live_count.saturating_sub(1);
-            self.free_list.push(id as usize);
+            self.free_list.push(id);
         }
         location
     }

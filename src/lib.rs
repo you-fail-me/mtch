@@ -1,3 +1,5 @@
+const _: () = assert!(std::mem::size_of::<usize>() == 8, "Only 64-bit architecture supported");
+
 pub mod engine;
 pub mod error;
 pub mod ingress;

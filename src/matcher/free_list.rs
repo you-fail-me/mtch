@@ -1,28 +1,32 @@
 pub struct FreeList {
-    bits: Box<[usize]>,
+    bits: Box<[u64]>,
     bump_idx: usize,
     capacity: usize,
 }
 
 impl FreeList {
-    pub fn new(capacity: usize) -> Self {
-        let words = (capacity + 63) / 64;
-        let bits = vec![0usize; words].into_boxed_slice();
-        Self { bits, bump_idx: 0, capacity }
+    pub fn new(capacity: u64) -> Self {
+        let words = ((capacity + 63) / 64) as usize;
+        let bits = vec![0u64; words].into_boxed_slice();
+        Self {
+            bits,
+            bump_idx: 0,
+            capacity: capacity as usize,
+        }
     }
 
-    pub fn pop(&mut self) -> Option<usize> {
+    pub fn pop(&mut self) -> Option<u64> {
         if let Some(free_idx) = self.find_first_free() {
             self.set_bit(free_idx);
-            Some(free_idx)
+            Some(free_idx as u64)
         } else {
             None
         }
     }
 
-    pub fn push(&mut self, idx: usize) {
-        if idx < self.capacity {
-            self.clear_bit(idx);
+    pub fn push(&mut self, idx: u64) {
+        if (idx as usize) < self.capacity {
+            self.clear_bit(idx as usize);
         }
     }
 
@@ -58,7 +62,7 @@ impl FreeList {
 
     fn find_first_free(&self) -> Option<usize> {
         for (word_idx, &word) in self.bits.iter().enumerate() {
-            if word != usize::MAX {
+            if word != u64::MAX {
                 let free_bit = (!word).trailing_zeros() as usize;
                 let global_idx = word_idx * 64 + free_bit;
                 if global_idx < self.capacity {

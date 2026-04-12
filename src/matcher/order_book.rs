@@ -35,7 +35,7 @@ pub enum CancelResult {
 pub struct PriceLevelSnapshot {
     pub px: u64,
     pub qty: u64,
-    pub count: usize,
+    pub count: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -66,11 +66,11 @@ impl OrderBook {
             tick_size,
             min_order_qty,
             max_order_qty,
-            pool: OrderPool::new(pool_capacity, capacity),
-            bids: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Less),
-            asks: TickArray::new(tick_capacity, base_px, tick_size, Ordering::Greater),
-            order_index: OrderIndex::new(pool_capacity),
-            fill_buffer: FillBuffer::new(max_fills),
+            pool: OrderPool::new(pool_capacity as u64, capacity),
+            bids: TickArray::new(tick_capacity as u64, base_px, tick_size, Ordering::Less),
+            asks: TickArray::new(tick_capacity as u64, base_px, tick_size, Ordering::Greater),
+            order_index: OrderIndex::new(pool_capacity as u64),
+            fill_buffer: FillBuffer::new(max_fills as u64),
         }
     }
 
@@ -86,7 +86,7 @@ impl OrderBook {
                 bids.push(PriceLevelSnapshot {
                     px,
                     qty: level.qty,
-                    count: level.order_count(),
+                    count: level.order_count() as u64,
                 });
             }
         }
@@ -99,7 +99,7 @@ impl OrderBook {
                 asks.push(PriceLevelSnapshot {
                     px,
                     qty: level.qty,
-                    count: level.order_count(),
+                    count: level.order_count() as u64,
                 });
             }
         }

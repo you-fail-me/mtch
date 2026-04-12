@@ -10,10 +10,10 @@ pub struct TickArray {
 }
 
 impl TickArray {
-    pub fn new(capacity: usize, base_px: u64, tick_size: u64, ordering: Ordering) -> Self {
-        let mut levels_vec: Vec<PriceLevel> = Vec::with_capacity(capacity);
+    pub fn new(capacity: u64, base_px: u64, tick_size: u64, ordering: Ordering) -> Self {
+        let mut levels_vec: Vec<PriceLevel> = Vec::with_capacity(capacity as usize);
 
-        for i in 0..capacity {
+        for i in 0..capacity as usize {
             let price = match ordering {
                 Ordering::Less => base_px.saturating_sub((i as u64) * tick_size), // Bids: decreasing prices
                 Ordering::Greater => base_px + (i as u64) * tick_size,            // Asks: increasing prices

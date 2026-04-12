@@ -11,7 +11,7 @@ fn placeholder_order() -> Order {
 #[derive(Debug)]
 struct Slot {
     order: Order,
-    generation: usize,
+    generation: u64,
     alive: bool,
 }
 
@@ -23,10 +23,10 @@ pub struct OrderPool {
 }
 
 impl OrderPool {
-    pub fn new(pool_capacity: usize, capacity: Arc<Capacity>) -> Self {
-        let mut vec: Vec<Slot> = Vec::with_capacity(pool_capacity);
+    pub fn new(pool_capacity: u64, capacity: Arc<Capacity>) -> Self {
+        let mut vec: Vec<Slot> = Vec::with_capacity(pool_capacity as usize);
 
-        for _ in 0..pool_capacity {
+        for _ in 0..pool_capacity as usize {
             vec.push(Slot {
                 order: placeholder_order(),
                 generation: 0,
@@ -39,20 +39,20 @@ impl OrderPool {
     }
 
     pub fn dealloc(&mut self, handle: Handle) {
-        let idx = handle.idx;
+        let idx = handle.idx as usize;
         if idx < self.slots.len() {
             let slot = &mut self.slots[idx];
             if slot.alive {
                 slot.alive = false;
                 self.live_count = self.live_count.saturating_sub(1);
-                self.capacity.release(idx as u64);
+                self.capacity.release(handle.idx);
             }
         }
     }
 
     /// Gets an immutable reference to an order.
     pub fn get(&self, handle: Handle) -> Option<&Order> {
-        let idx = handle.idx;
+        let idx = handle.idx as usize;
         if idx >= self.slots.len() {
             return None;
         }
@@ -72,7 +72,7 @@ impl OrderPool {
 
     /// Gets a mutable reference to an order.
     pub fn get_mut(&mut self, handle: Handle) -> Option<&mut Order> {
-        let idx = handle.idx;
+        let idx = handle.idx as usize;
         if idx >= self.slots.len() {
             return None;
         }
@@ -103,7 +103,7 @@ impl OrderPool {
         slot.order = order;
         self.live_count += 1;
 
-        let handle = Handle { idx, generation: slot.generation };
+        let handle = Handle { idx: slot_id, generation: slot.generation };
 
         Some((handle, &mut slot.order))
     }
