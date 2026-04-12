@@ -29,7 +29,7 @@ vmType: vz
 # Each pinned to dedicated cores with hyperthreading avoidance
 cpus: 4
 memory: "8GiB"
-disk: "50GiB"
+disk: "10GiB"
 
 # Base image: Debian 12 (Bookworm)
 # Lightweight (~27MB base), stable, and fully compatible with io_uring
