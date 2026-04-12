@@ -1,0 +1,274 @@
+# This configuration creates a Linux VM optimized for io_uring development
+# and the thread-per-core architecture of the matching engine.
+#
+# REQUIREMENTS:
+#   - macOS 13.0+ (for VZ virtualization)
+#   - Lima v0.14+
+#   - At least 4 physical CPU cores recommended
+#
+# USAGE:
+#   limactl start ./lima.yaml --name mtch // or limactl start mtch if already created
+#   limactl shell mtch
+#   cd ~/mtch && cargo build --release
+#
+#   # Run tests with io_uring support
+#   cargo test
+#
+#   # Run benchmarks
+#   cargo bench
+#
+#   limactl stop mtch
+#   limactl delete mtch
+
+# Use Apple's Virtualization.framework for best performance
+# VZ provides near-native performance with VirtioFS
+vmType: vz
+
+# VM resources - tuned for the three-thread model
+# Main (ingress) + WAL (sequencer) + OrderBook (matcher)
+# Each pinned to dedicated cores with hyperthreading avoidance
+cpus: 4
+memory: "8GiB"
+disk: "50GiB"
+
+# Base image: Debian 12 (Bookworm)
+# Lightweight (~27MB base), stable, and fully compatible with io_uring
+# Kernel 6.1 with full io_uring support including:
+#   - io_uring_enter, io_uring_setup, io_uring_register
+#   - Advanced features like registered buffers, polling
+images:
+  - location: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.raw"
+    arch: "x86_64"
+  - location: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.raw"
+    arch: "aarch64"
+
+# Mount project directory with VirtioFS for fast file sharing
+# This provides near-native performance for builds
+# Note: mountType is set at the VM level for vz, not per-mount
+mounts:
+  - location: "~/projects/mtch"
+    mountPoint: "/home/{{.User}}.linux/mtch"
+    writable: true
+  # Optional: Mount entire projects directory if you have multiple repos
+  - location: "~/projects"
+    mountPoint: "/home/{{.User}}.linux/projects"
+    writable: true
+
+# For vz VM type, mount type is configured at the VM level
+mountType: virtiofs
+
+# Container runtime - disable to avoid conflicts
+# We want direct Linux development, not Docker abstraction
+containerd:
+  system: false
+  user: false
+
+# Network configuration
+networks:
+  # vzNAT provides internet access and is accessible from host
+  - vzNAT: true
+
+# SSH configuration
+ssh:
+  localPort: 6022
+  loadDotSSHPubKeys: true
+  forwardAgent: true
+
+# Provisioning scripts
+provision:
+  # System-level setup: kernel modules, dependencies
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      echo "=== Setting up mtch development environment ==="
+
+      # Update packages
+      apt-get update
+      apt-get install -y \
+        sudo \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        git \
+        curl \
+        wget \
+        htop \
+        iotop \
+        linux-perf \
+        liburing-dev \
+        liburing2
+
+      # Enable io_uring in kernel
+      # kernel.io_uring_disabled=0 means io_uring is enabled for all users
+      # kernel.io_uring_disabled=1 would require CAP_SYS_ADMIN
+      echo "kernel.io_uring_disabled=0" > /etc/sysctl.d/99-io_uring.conf
+      sysctl --system
+
+      # Configure kernel for low-latency networking and io_uring
+      cat > /etc/sysctl.d/99-performance.conf << 'EOF'
+      # Network tuning
+      net.core.netdev_max_backlog = 65536
+      net.core.somaxconn = 65535
+
+      # Virtual memory tuning
+      vm.swappiness = 1
+      vm.dirty_ratio = 5
+      vm.dirty_background_ratio = 2
+
+      # File system tuning for WAL
+      fs.aio-max-nr = 1048576
+      fs.file-max = 2097152
+      EOF
+      sysctl --system
+
+      # Verify io_uring availability
+      echo "=== io_uring kernel support ==="
+      if grep -q CONFIG_IO_URING=y /boot/config-$(uname -r) 2>/dev/null || \
+         [ -f /proc/config.gz ] && zgrep -q CONFIG_IO_URING=y /proc/config.gz 2>/dev/null; then
+        echo "✓ io_uring is supported in kernel"
+      else
+        echo "! Warning: Could not verify io_uring kernel support"
+      fi
+
+      # Check kernel version (5.1+ required, 5.11+ recommended for tokio-uring)
+      KERNEL_MAJOR=$(uname -r | cut -d. -f1)
+      KERNEL_MINOR=$(uname -r | cut -d. -f2)
+      echo "Kernel version: $(uname -r)"
+
+      if [ "$KERNEL_MAJOR" -gt 5 ] || ([ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" -ge 11 ]); then
+        echo "✓ Kernel 5.11+ detected - full io_uring support (tokio-uring compatible)"
+      elif [ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" -ge 1 ]; then
+        echo "✓ Kernel 5.1+ detected - basic io_uring support"
+      else
+        echo "✗ Kernel too old for io_uring (need 5.1+)"
+      fi
+
+      # Increase locked memory limits for io_uring
+      # io_uring requires locked memory for ring buffers
+      cat > /etc/security/limits.d/99-memlock.conf << 'EOF'
+      *    soft    memlock    unlimited
+      *    hard    memlock    unlimited
+      root soft    memlock    unlimited
+      root hard    memlock    unlimited
+      EOF
+
+      # Create mtch user with proper permissions
+      id -u mtch &>/dev/null || useradd -m -s /bin/bash -G sudo,adm mtch
+      echo "mtch ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/mtch
+      chmod 440 /etc/sudoers.d/mtch
+
+      echo "=== System setup complete ==="
+
+  # User-level setup: Rust toolchain, cargo tools
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      echo "=== Setting up Rust toolchain ==="
+
+      # Install Rust via rustup
+      if ! command -v rustc &> /dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+        source "$HOME/.cargo/env"
+      fi
+
+      # Ensure we have the latest stable
+      rustup update stable
+      rustup default stable
+
+      # Install additional components
+      rustup component add clippy rustfmt
+
+      # Install cargo tools for development
+      cargo install cargo-watch cargo-cache cargo-bloat cargo-flamegraph || true
+
+      # Configure cargo for faster builds in the VM
+      mkdir -p ~/.cargo
+      cat > ~/.cargo/config.toml << 'EOF'
+      [build]
+      # Use all available cores
+      jobs = 0
+
+      [profile.release]
+      # Optimize for the native CPU
+      codegen-units = 1
+      lto = "fat"
+
+      [target.x86_64-unknown-linux-gnu]
+      rustflags = ["-C", "target-cpu=native"]
+
+      [target.aarch64-unknown-linux-gnu]
+      rustflags = ["-C", "target-cpu=native"]
+      EOF
+
+      echo "=== Rust setup complete ==="
+      rustc --version
+      cargo --version
+
+# Final message after provisioning
+message: |
+  development environment is ready!
+
+  Next steps:
+    1. SSH into the VM:
+       limactl shell mtch-dev
+
+    2. Navigate to project:
+       cd ~/mtch
+
+    3. Build and test:
+       cargo build --release
+       cargo test
+       cargo bench
+
+    4. Verify io_uring support:
+       ls /usr/include/liburing.h
+       ls /usr/lib/x86_64-linux-gnu/liburing.so* 2>/dev/null || ls /usr/lib/aarch64-linux-gnu/liburing.so*
+
+  VM Details:
+    - Name: mtch-dev
+    - CPUs: 4
+    - Memory: 8GiB
+    - SSH: limactl shell mtch-dev
+    - Mounts: /home/<user>.linux/mtch (project directory)
+
+  io_uring Support:
+    - Kernel: Check with 'uname -r'
+    - Library: liburing-dev installed
+    - Syscalls: io_uring_enter, io_uring_setup, io_uring_register
+
+  Notes:
+    - Real-time priorities (SCHED_FIFO) are available
+    - CPU affinity will work correctly (thread-per-core model)
+    - File changes in ~/mtch on macOS sync instantly to the VM
+
+# Probe for readiness
+probes:
+  - description: "Rust is installed"
+    script: |
+      #!/bin/bash
+      source "$HOME/.cargo/env" 2>/dev/null || true
+      command -v rustc &>/dev/null && command -v cargo &>/dev/null
+    hint: "Rust toolchain installation may still be in progress..."
+
+  - description: "io_uring is available"
+    script: |
+      #!/bin/bash
+      [ -f /usr/include/liburing.h ] || [ -f /usr/include/x86_64-linux-gnu/liburing.h ] || [ -f /usr/include/aarch64-linux-gnu/liburing.h ]
+    hint: "System packages may still be installing..."
+
+# Host configuration
+hostResolver:
+  hosts:
+    host.lima.internal: host.lima.internal
+
+# Port forwarding (if needed for testing)
+portForwards:
+  # Example: Forward a hypothetical API port
+  # - guestPort: 8080
+  #   hostIP: 127.0.0.1
+  #   hostPort: 8080
+  #   proto: tcp
