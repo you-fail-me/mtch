@@ -197,8 +197,8 @@ impl OrderBook {
                 break;
             }
 
-            let best_hot = self.asks.best_level_mut(self.tick_size, Side::Ask);
-            let (ask_px, level) = match best_hot {
+            let best_lvl = self.asks.best_level_mut(self.tick_size, Side::Ask);
+            let (ask_px, level) = match best_lvl {
                 Some((px, level)) if !level.is_empty() => (px, level),
                 _ => break,
             };
@@ -228,8 +228,8 @@ impl OrderBook {
                 break;
             }
 
-            let best_hot = self.bids.best_level_mut(self.tick_size, Side::Bid);
-            let (bid_px, level) = match best_hot {
+            let best_lvl = self.bids.best_level_mut(self.tick_size, Side::Bid);
+            let (bid_px, level) = match best_lvl {
                 Some((px, level)) if !level.is_empty() => (px, level),
                 _ => break,
             };

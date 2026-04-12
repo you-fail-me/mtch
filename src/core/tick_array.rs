@@ -69,7 +69,7 @@ impl TickArray {
         Some(level)
     }
 
-    // Return best non-empty price level in the hot portion of the book.
+    // Return best non-empty price level
     pub fn best_level_mut(&mut self, tick_size: u64, side: Side) -> Option<(u64, &mut PriceLevel)> {
         let idx = self.best_idx?;
         let level = &mut self.levels[idx];
