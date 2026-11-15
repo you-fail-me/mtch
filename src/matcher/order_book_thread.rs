@@ -4,7 +4,7 @@ use crate::matcher::capacity::Capacity;
 use crate::matcher::messages::{MatchCmd, OrderBookResponse};
 use crate::matcher::order::Order;
 use crate::matcher::order_book::OrderBook;
-use rtrb::{Consumer, Producer};
+use rtrb::{Consumer, Producer, PushError};
 
 pub struct OrderBookThread {
     symbol: u32,
@@ -34,7 +34,10 @@ impl OrderBookThread {
     }
 
     pub fn run(mut self, capacity: Arc<Capacity>) {
-        let mut book = OrderBook::new(self.tick_capacity as usize, self.pool_capacity as usize, self.symbol, self.tick_size, self.base_px, self.min_order_qty, self.max_order_qty, capacity);
+        // Config is validated before spawn; if not, exit so the WAL sees an abandoned queue.
+        let Ok(mut book) = OrderBook::try_new(self.tick_capacity as usize, self.pool_capacity as usize, self.symbol, self.tick_size, self.base_px, self.min_order_qty, self.max_order_qty, capacity) else {
+            return;
+        };
 
         loop {
             if let Ok(cmd) = self.cmd_rx.pop() {
@@ -67,20 +70,30 @@ impl OrderBookThread {
                         #[cfg(debug_assertions)]
                         println!("[BOOK] market order_id {} seq {} processed", order_id, seq);
                     }
-                    MatchCmd::CancelOrder { order_id, seq } => {
+                    MatchCmd::CancelOrder { order_id, seq: _seq } => {
                         #[cfg(debug_assertions)]
-                        println!("[BOOK] cancel order_id {} seq {} received", order_id, seq);
+                        println!("[BOOK] cancel order_id {} seq {} received", order_id, _seq);
 
                         book.cancel_order(order_id);
                     }
                     MatchCmd::GetSnapshot => {
                         let snapshot = book.snapshot();
-                        let _ = self.cmd_tx.push(OrderBookResponse::Snapshot { snapshot });
+                        let mut resp = OrderBookResponse::Snapshot { snapshot };
+                        // Spin until delivered; give up only if the consumer is gone.
+                        while let Err(PushError::Full(back)) = self.cmd_tx.push(resp) {
+                            if self.cmd_tx.is_abandoned() {
+                                break;
+                            }
+                            resp = back;
+                            std::hint::spin_loop();
+                        }
                     }
                     MatchCmd::Shutdown => {
                         break;
                     }
                 }
+            } else if self.cmd_rx.is_abandoned() && self.cmd_rx.is_empty() {
+                break;
             } else {
                 std::hint::spin_loop();
             }

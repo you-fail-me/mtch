@@ -5,4 +5,9 @@ pub enum Error {
     EngineStopped,
     OrderNotFound(u64),
     CapacityCollision,
+    DuplicateOrderId(u64),
+    OrderIdOutOfRange(u64),
+    InvalidConfig(&'static str),
+    ThreadPanicked(&'static str),
+    SnapshotUnavailable,
 }

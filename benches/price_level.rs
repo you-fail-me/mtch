@@ -1,135 +1,251 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
-#![allow(clippy::missing_docs)]
 
-use std::hint::black_box;
+mod common;
+
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use mtch::matcher::order::Handle;
 use mtch::matcher::{Capacity, Order, OrderPool, PriceLevel, Side};
 
-fn bench_place_order(c: &mut Criterion) {
-    let mut group = c.benchmark_group("price_level_place");
+use common::{BATCH, MAKER, QTY, reserve, time_batched};
 
-    for size in [0, 10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter_with_setup(
-                || {
-                    let pool_capacity = size + 16;
-                    let capacity = Arc::new(Capacity::new(pool_capacity as u64));
-                    let mut pool = OrderPool::new(pool_capacity, capacity);
-                    let mut level = PriceLevel::new(10000);
+const PX: u64 = 10_000;
 
-                    for i in 0..size {
-                        let i_u64 = i as u64;
-                        let order = Order::new_limit(i_u64, 1, Side::Bid, 10000, 100, i_u64);
-                        level.add_order(order, &mut pool, i_u64).unwrap();
-                    }
-                    (pool, level, size as u64)
-                },
-                |(mut pool, mut level, size)| {
-                    let id = size; // Use slot just after pre-populated range
-                    let order = Order::new_limit(id, 1, Side::Bid, 10000, 100, id);
-                    black_box(level.add_order(order, &mut pool, id).unwrap());
-                },
-            );
+// One level of n orders (ids 0..n, same px) in its own pool, plus an untimed FIFO model. Each
+// benchmark times one op per fixture, then (untimed) asserts against the model and restores n
+// orders. `verify_fifo` checks the real list order against the model at build and after every
+// sample. None of these ops free pool slots; the matcher deallocates separately.
+struct Fixture {
+    pool: OrderPool,
+    capacity: Arc<Capacity>,
+    level: PriceLevel,
+    fifo: VecDeque<(u64, Handle)>,
+    slot: u64,
+    target: Handle,
+}
+
+impl Fixture {
+    fn new(n: usize) -> Self {
+        let capacity = Arc::new(Capacity::new(n as u64 + 16));
+        let pool = OrderPool::new(n as u64 + 16, Arc::clone(&capacity));
+        let mut f = Self {
+            pool,
+            capacity,
+            level: PriceLevel::new(PX),
+            fifo: VecDeque::with_capacity(n + 1),
+            slot: 0,
+            target: Handle { idx: 0, generation: 0 },
+        };
+        for id in 0..n as u64 {
+            f.push_tail(id);
+        }
+        f.verify_fifo();
+        f
+    }
+
+    fn push_tail(&mut self, id: u64) {
+        let slot = reserve(&self.capacity);
+        let (handle, became_non_empty) = self.level.add_order(order(id), &mut self.pool, slot).expect("append failed");
+        assert_eq!(became_non_empty, self.fifo.is_empty());
+        self.fifo.push_back((id, handle));
+    }
+
+    fn pop_head(&mut self) -> u64 {
+        let (id, handle) = self.fifo.pop_front().expect("model empty");
+        assert_eq!(self.level.head, Some(handle));
+        self.level.remove_head(&mut self.pool).expect("remove_head failed");
+        self.pool.dealloc(handle);
+        id
+    }
+
+    fn assert_metrics(&self) {
+        assert_eq!(self.level.count, self.fifo.len());
+        assert_eq!(self.level.qty, self.fifo.len() as u64 * QTY);
+        assert_eq!(self.level.head, self.fifo.front().map(|&(_, h)| h));
+    }
+
+    /// Walks the list head to tail by unlinking and re-appending every order (restoring the
+    /// same order) and asserts the visit order matches the model.
+    fn verify_fifo(&mut self) {
+        self.assert_metrics();
+        for _ in 0..self.fifo.len() {
+            let expected = self.fifo.front().map(|&(id, _)| id);
+            assert_eq!(self.level.peek_head(&self.pool).map(|o| o.id), expected, "FIFO order differs from model");
+            let id = self.pop_head();
+            self.push_tail(id);
+        }
+        self.assert_metrics();
+    }
+}
+
+fn order(id: u64) -> Order {
+    Order::new_limit(id, MAKER, Side::Bid, PX, QTY, id)
+}
+
+fn fixtures(n: usize) -> Vec<Fixture> {
+    (0..BATCH).map(|_| Fixture::new(n)).collect()
+}
+
+fn verify_all(levels: &mut [Fixture]) {
+    for f in levels {
+        f.verify_fifo();
+    }
+}
+
+/// `add_order`: append at the tail of a level of n orders into a pre-reserved slot.
+/// Restore: unlink it with `remove_order` and free the slot.
+fn bench_append_tail(c: &mut Criterion) {
+    let mut group = c.benchmark_group("price_level_append_tail");
+    for n in [0, 10, 100, 1000] {
+        group.bench_function(BenchmarkId::from_parameter(n), |b| {
+            let mut levels = fixtures(n);
+            for f in &mut levels {
+                f.slot = reserve(&f.capacity);
+            }
+            let mut results = Vec::with_capacity(BATCH);
+            b.iter_custom(|iters| {
+                let mut checked = 0;
+                let elapsed = time_batched(
+                    iters,
+                    &mut levels,
+                    &mut results,
+                    |f| f.level.add_order(order(n as u64), &mut f.pool, f.slot),
+                    |f, result| {
+                        let (handle, became_non_empty) = result.expect("append failed");
+                        assert_eq!(became_non_empty, n == 0);
+                        f.fifo.push_back((n as u64, handle));
+                        if checked < BATCH {
+                            checked += 1;
+                            f.verify_fifo(); // probe must be visited last
+                        }
+                        let (_, handle) = f.fifo.pop_back().expect("model empty");
+                        assert_eq!(f.level.remove_order(handle, &mut f.pool), Some(n == 0));
+                        f.pool.dealloc(handle);
+                        f.assert_metrics();
+                        f.slot = reserve(&f.capacity);
+                    },
+                );
+                verify_all(&mut levels);
+                elapsed
+            });
         });
     }
     group.finish();
 }
 
-fn bench_fill_order(c: &mut Criterion) {
-    let mut group = c.benchmark_group("price_level_fill");
-
-    for size in [10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter_with_setup(
-                || {
-                    let pool_capacity = size + 16;
-                    let capacity = Arc::new(Capacity::new(pool_capacity as u64));
-                    let mut pool = OrderPool::new(pool_capacity, capacity);
-                    let mut level = PriceLevel::new(10000);
-                    for i in 0..size {
-                        let i_u64 = i as u64;
-                        let order = Order::new_limit(i_u64, 1, Side::Bid, 10000, 100, i_u64);
-                        level.add_order(order, &mut pool, i_u64).unwrap();
-                    }
-                    (pool, level)
-                },
-                |(mut pool, mut level)| {
-                    black_box(level.remove_head(&mut pool));
-                },
-            );
+/// `remove_head`: list unlink and aggregate update only (no matching, no deallocation; unused by
+/// `OrderBook`). Restore: free the slot and re-append the id at the tail.
+fn bench_unlink_head(c: &mut Criterion) {
+    let mut group = c.benchmark_group("price_level_unlink_head");
+    for n in [10, 100, 1000] {
+        group.bench_function(BenchmarkId::from_parameter(n), |b| {
+            let mut levels = fixtures(n);
+            let mut results = Vec::with_capacity(BATCH);
+            b.iter_custom(|iters| {
+                let elapsed = time_batched(
+                    iters,
+                    &mut levels,
+                    &mut results,
+                    |f| f.level.remove_head(&mut f.pool),
+                    |f, result| {
+                        assert_eq!(result, Some(()));
+                        let (id, handle) = f.fifo.pop_front().expect("model empty");
+                        f.assert_metrics();
+                        f.pool.dealloc(handle);
+                        f.push_tail(id);
+                    },
+                );
+                verify_all(&mut levels);
+                elapsed
+            });
         });
     }
     group.finish();
 }
 
+const REMOVE_N: usize = 100;
+const POSITIONS: [(&str, usize); 3] = [("head", 0), ("middle", REMOVE_N / 2), ("tail", REMOVE_N - 1)];
+
+/// `remove_order` (unlink by handle, as cancel and full fills use it) of the order at FIFO index
+/// 0, 50 or 99 of one level of 100, all at the same px. Restore: free the slot, re-append the id
+/// at the tail; the next target is whichever order now sits at the same index.
 fn bench_remove_order(c: &mut Criterion) {
-    let mut group = c.benchmark_group("price_level_remove");
+    // On a fresh level the targets are ids 0/50/99 and removal leaves the other 99 in order.
+    for (label, idx) in POSITIONS {
+        let mut f = Fixture::new(REMOVE_N);
+        let (id, handle) = f.fifo.remove(idx).expect("index");
+        assert_eq!(id, idx as u64, "{label}");
+        assert_eq!(f.level.remove_order(handle, &mut f.pool), Some(false), "{label}");
+        f.pool.dealloc(handle);
+        f.verify_fifo();
+        assert!(f.fifo.iter().map(|&(id, _)| id).eq((0..REMOVE_N as u64).filter(|&i| i != id)), "{label}");
+    }
 
-    for position in ["head", "middle", "tail"].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(position), position, |b, &position| {
-            b.iter_with_setup(
-                || {
-                    let pool_capacity = 128;
-                    let capacity = Arc::new(Capacity::new(pool_capacity as u64));
-                    let mut pool = OrderPool::new(pool_capacity, capacity);
-                    let mut level = PriceLevel::new(10000);
-
-                    let target_id = 100u64;
-                    let target_px = match position {
-                        "head" => 10001,
-                        "middle" => 10000,
-                        "tail" => 9999,
-                        _ => unreachable!(),
-                    };
-                    let target_order = Order::new_limit(target_id, 1, Side::Bid, target_px, 100, target_id);
-                    let (target_handle, _) = level.add_order(target_order, &mut pool, target_id).unwrap();
-
-                    // Add remaining orders
-                    for i in 0..99u64 {
-                        let order = Order::new_limit(i, 1, Side::Bid, 10000, 100, i);
-                        level.add_order(order, &mut pool, i).unwrap();
-                    }
-
-                    (pool, level, target_handle)
-                },
-                |(mut pool, mut level, handle)| {
-                    black_box(level.remove_order(handle, &mut pool));
-                },
-            );
+    let mut group = c.benchmark_group("price_level_remove_order");
+    for (label, idx) in POSITIONS {
+        group.bench_function(BenchmarkId::from_parameter(label), |b| {
+            let mut levels = fixtures(REMOVE_N);
+            let mut results = Vec::with_capacity(BATCH);
+            b.iter_custom(|iters| {
+                for f in &mut levels {
+                    f.target = f.fifo[idx].1;
+                }
+                let elapsed = time_batched(
+                    iters,
+                    &mut levels,
+                    &mut results,
+                    |f| f.level.remove_order(f.target, &mut f.pool),
+                    |f, result| {
+                        assert_eq!(result, Some(false));
+                        let (id, handle) = f.fifo.remove(idx).expect("index");
+                        assert_eq!(handle, f.target);
+                        f.assert_metrics();
+                        f.pool.dealloc(handle);
+                        f.push_tail(id);
+                        f.target = f.fifo[idx].1;
+                    },
+                );
+                verify_all(&mut levels);
+                elapsed
+            });
         });
     }
     group.finish();
 }
 
-fn bench_update_quantity(c: &mut Criterion) {
-    let mut group = c.benchmark_group("price_level_update_qty");
-
-    for size in [10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter_with_setup(
-                || {
-                    let pool_capacity = size + 8;
-                    let capacity = Arc::new(Capacity::new(pool_capacity as u64));
-                    let mut pool = OrderPool::new(pool_capacity, capacity);
-                    let mut level = PriceLevel::new(10000);
-                    for i in 0..size {
-                        let i_u64 = i as u64;
-                        let order = Order::new_limit(i_u64, 1, Side::Bid, 10000, 100, i_u64);
-                        level.add_order(order, &mut pool, i_u64).unwrap();
-                    }
-                    (pool, level)
-                },
-                |(mut pool, mut level)| {
-                    black_box(level.update_head_qty(50, &mut pool));
-                },
-            );
+/// `update_head_qty(50)`: partial-fill bookkeeping on the head (100 -> 50), no list change.
+/// Restore: unlink the reduced head and append a full-quantity order with the same id.
+fn bench_reduce_head_qty(c: &mut Criterion) {
+    let mut group = c.benchmark_group("price_level_reduce_head_qty");
+    for n in [10, 100, 1000] {
+        group.bench_function(BenchmarkId::from_parameter(n), |b| {
+            let mut levels = fixtures(n);
+            let mut results = Vec::with_capacity(BATCH);
+            b.iter_custom(|iters| {
+                let elapsed = time_batched(
+                    iters,
+                    &mut levels,
+                    &mut results,
+                    |f| f.level.update_head_qty(50, &mut f.pool),
+                    |f, result| {
+                        assert_eq!(result, Some(()));
+                        assert_eq!(f.level.peek_head(&f.pool).map(|o| o.qty), Some(50));
+                        assert_eq!(f.level.qty, n as u64 * QTY - 50);
+                        let id = f.pop_head();
+                        f.push_tail(id);
+                        f.assert_metrics();
+                    },
+                );
+                verify_all(&mut levels);
+                elapsed
+            });
         });
     }
     group.finish();
 }
 
-criterion_group!(benches, bench_place_order, bench_fill_order, bench_remove_order, bench_update_quantity);
+criterion_group!(benches, bench_append_tail, bench_unlink_head, bench_remove_order, bench_reduce_head_qty);
 criterion_main!(benches);

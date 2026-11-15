@@ -1,64 +1,99 @@
 use crate::error::Error;
-use crate::matcher::free_list::FreeList;
 use crate::matcher::order::OrderLocation;
 
-/// Fixed-capacity order index with O(1) operations and ID recycling.
+/// Fixed-capacity order index addressed directly by order id: valid ids are `0..capacity`.
 pub struct OrderIndex {
-    pub entries: Box<[Option<OrderLocation>]>,
-    pub next_id: u64,
-    pub live_count: usize,
-    pub free_list: FreeList,
+    entries: Box<[Option<OrderLocation>]>,
+    live_count: usize,
 }
 
 impl OrderIndex {
     pub fn new(capacity: u64) -> Self {
-        let mut vec: Vec<Option<OrderLocation>> = Vec::with_capacity(capacity as usize);
-
-        for _ in 0..capacity as usize {
-            vec.push(None);
-        }
-        let entries = vec.into_boxed_slice();
-
         Self {
-            entries,
-            next_id: 0,
+            entries: vec![None; capacity as usize].into_boxed_slice(),
             live_count: 0,
-            free_list: FreeList::new(capacity),
         }
     }
 
-    pub fn next_id(&mut self) -> u64 {
-        if let Some(recycled_id) = self.free_list.pop() {
-            recycled_id
-        } else {
-            let id = self.next_id;
-            self.next_id += 1;
-            id
-        }
-    }
-
+    /// # Errors
+    ///
+    /// Index unchanged on error: `OrderIdOutOfRange` if `id >= capacity`, `DuplicateOrderId` if `id` is present.
     pub fn insert(&mut self, id: u64, location: OrderLocation) -> Result<(), Error> {
-        let idx = (id as usize) % self.entries.len();
-        if self.entries[idx].is_some() {
-            return Err(Error::CapacityCollision);
+        let entry = self.entries.get_mut(id as usize).ok_or(Error::OrderIdOutOfRange(id))?;
+        if entry.is_some() {
+            return Err(Error::DuplicateOrderId(id));
         }
-        self.entries[idx] = Some(location);
+        *entry = Some(location);
         self.live_count += 1;
         Ok(())
     }
 
     pub fn get(&self, id: u64) -> Option<&OrderLocation> {
-        let idx = (id as usize) % self.entries.len();
-        self.entries[idx].as_ref()
+        self.entries.get(id as usize)?.as_ref()
     }
 
     pub fn remove(&mut self, id: u64) -> Option<OrderLocation> {
-        let idx = (id as usize) % self.entries.len();
-        let location = self.entries[idx].take();
+        let location = self.entries.get_mut(id as usize)?.take();
         if location.is_some() {
-            self.live_count = self.live_count.saturating_sub(1);
-            self.free_list.push(id);
+            self.live_count -= 1;
         }
         location
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.live_count
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.live_count == 0
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::matcher::order::{Handle, Side};
+
+    fn loc(px: u64) -> OrderLocation {
+        OrderLocation {
+            side: Side::Bid,
+            px,
+            handle: Handle { idx: px, generation: 1 },
+        }
+    }
+
+    #[test]
+    fn test_index_rejects_out_of_range_and_aliasing_ids() {
+        // Old index used id % len: with capacity 8, remove(9) removed order 1.
+        let mut index = OrderIndex::new(8);
+        index.insert(1, loc(1)).unwrap();
+        assert!(index.remove(9).is_none());
+        assert!(index.get(9).is_none());
+        assert!(matches!(index.insert(9, loc(9)), Err(Error::OrderIdOutOfRange(9))));
+        assert!(matches!(index.insert(u64::MAX, loc(9)), Err(Error::OrderIdOutOfRange(u64::MAX))));
+        assert_eq!(index.get(1).unwrap().px, 1);
+        assert_eq!(index.len(), 1);
+
+        let mut empty = OrderIndex::new(0);
+        assert!(empty.get(0).is_none());
+        assert!(empty.remove(0).is_none());
+        assert!(matches!(empty.insert(0, loc(0)), Err(Error::OrderIdOutOfRange(0))));
+    }
+
+    #[test]
+    fn test_index_duplicate_rejected_without_mutation() {
+        let mut index = OrderIndex::new(8);
+        index.insert(7, loc(1)).unwrap();
+        assert!(matches!(index.insert(7, loc(2)), Err(Error::DuplicateOrderId(7))));
+        assert_eq!(index.get(7).unwrap().px, 1);
+        assert_eq!(index.len(), 1);
+        assert_eq!(index.remove(7).unwrap().px, 1);
+        assert!(index.remove(7).is_none());
+        assert!(index.is_empty());
+        index.insert(7, loc(3)).unwrap();
+        assert_eq!(index.get(7).unwrap().px, 3);
     }
 }

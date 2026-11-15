@@ -563,11 +563,11 @@ fn test_capacity_limit_order_rejected_market_order_accepted() {
     .unwrap();
 
     // First, add a resting bid order to provide liquidity for market sells
-    let resp1 = engine.add_limit_order(1, 100, Side::Bid, 99, 50).unwrap();
+    let resp1 = engine.add_limit_order(0, 100, Side::Bid, 99, 50).unwrap();
     assert_added(resp1);
 
     // Fill up the remaining capacity with a resting ask order
-    let resp2 = engine.add_limit_order(2, 101, Side::Ask, 100, 50).unwrap();
+    let resp2 = engine.add_limit_order(1, 101, Side::Ask, 100, 50).unwrap();
     assert_added(resp2);
 
     // Verify both orders are resting
@@ -575,7 +575,7 @@ fn test_capacity_limit_order_rejected_market_order_accepted() {
     assert_book(&snap, &[(99, 50)], &[(100, 50)]);
 
     // Try to add another limit order - should be rejected (capacity full)
-    let resp3 = engine.add_limit_order(3, 102, Side::Bid, 98, 50).unwrap();
+    let resp3 = engine.add_limit_order(0, 102, Side::Bid, 98, 50).unwrap();
     assert_rejected(resp3);
 
     // Try to add a market sell order - should NOT be rejected (market orders don't need slots)
@@ -589,7 +589,7 @@ fn test_capacity_limit_order_rejected_market_order_accepted() {
     assert_book(&snap, &[], &[(100, 50)]);
 
     // Now that a slot was freed (bid@99 was filled), we can add a limit order again
-    let resp5 = engine.add_limit_order(5, 104, Side::Bid, 98, 50).unwrap();
+    let resp5 = engine.add_limit_order(0, 104, Side::Bid, 98, 50).unwrap();
     assert_added(resp5);
 
     // Verify the bid was added

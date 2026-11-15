@@ -1,6 +1,5 @@
 pub struct FreeList {
     bits: Box<[u64]>,
-    bump_idx: usize,
     capacity: usize,
 }
 
@@ -8,11 +7,7 @@ impl FreeList {
     pub fn new(capacity: u64) -> Self {
         let words = ((capacity + 63) / 64) as usize;
         let bits = vec![0u64; words].into_boxed_slice();
-        Self {
-            bits,
-            bump_idx: 0,
-            capacity: capacity as usize,
-        }
+        Self { bits, capacity: capacity as usize }
     }
 
     pub fn pop(&mut self) -> Option<u64> {
@@ -34,14 +29,9 @@ impl FreeList {
         self.bits.iter().map(|word| word.count_ones() as usize).sum()
     }
 
+    // Draws from the bitmap: a separate bump counter re-issued indices already handed out by `pop`.
     pub fn bump_next(&mut self) -> Option<usize> {
-        if self.bump_idx < self.capacity {
-            let idx = self.bump_idx;
-            self.bump_idx += 1;
-            Some(idx)
-        } else {
-            None
-        }
+        self.pop().map(|idx| idx as usize)
     }
 
     fn set_bit(&mut self, idx: usize) {
@@ -71,5 +61,23 @@ impl FreeList {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bump_next_and_pop_never_reissue() {
+        for capacity in [0u64, 1, 64, 65] {
+            let mut fl = FreeList::new(capacity);
+            let mut seen = Vec::new();
+            while let Some(idx) = if seen.len() % 2 == 0 { fl.pop() } else { fl.bump_next().map(|i| i as u64) } {
+                assert!(!seen.contains(&idx), "capacity {capacity}: {idx} issued twice");
+                seen.push(idx);
+            }
+            assert_eq!(seen.len() as u64, capacity);
+        }
     }
 }

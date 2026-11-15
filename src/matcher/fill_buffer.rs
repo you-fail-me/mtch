@@ -1,5 +1,6 @@
 use crate::matcher::order_book::Fill;
 
+#[derive(Debug)]
 pub struct FillBuffer {
     slots: Box<[Fill]>,
     count: usize,
@@ -24,9 +25,20 @@ impl FillBuffer {
         Self { slots: vec.into_boxed_slice(), count: 0 }
     }
 
+    /// Callers check `is_full` before executing the trade being recorded.
     pub fn push(&mut self, fill: Fill) {
         self.slots[self.count] = fill;
         self.count += 1;
+    }
+
+    #[must_use]
+    pub fn is_full(&self) -> bool {
+        self.count == self.slots.len()
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[Fill] {
+        &self.slots[..self.count]
     }
 
     pub fn drain(&mut self) -> &[Fill] {
